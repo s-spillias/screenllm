@@ -1,0 +1,31 @@
+# R
+.Rproj.user/
+.Rhistory
+.Rdata
+.RData
+.httr-oauth
+.DS_Store
+
+# devtools / R CMD check artefacts
+*.Rcheck/
+*.tar.gz
+*.Rproj
+
+# roxygen output re-generation
+# (keep man/ tracked; it is authoritative for CRAN)
+
+# Package-local cache created by rank_records()
+cache/
+
+# Session outputs
+inst/doc/
+doc/
+Meta/
+
+# CRAN comments live here but should not ship with the tarball
+# (kept out of tarball via .Rbuildignore; kept out of git-tracked history
+# is a matter of taste — we track it so submission history is auditable)
+
+# Local devel scratch
+dev/
+scratch/

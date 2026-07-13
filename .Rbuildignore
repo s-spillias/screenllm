@@ -1,0 +1,13 @@
+^\.git$
+^\.gitignore$
+^\.github$
+^\.Rproj\.user$
+^\.Rhistory$
+^\.RData$
+^cache/
+^dev/
+^README\.Rmd$
+^doc$
+^Meta$
+^cran-comments\.md$
+^\.travis\.yml$

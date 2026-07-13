@@ -1,0 +1,113 @@
+---
+title: "screenllm quickstart"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{screenllm quickstart}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+This vignette walks through the six-call workflow `screenllm`
+implements. Everything below runs on a laptop against a locally-served
+Ollama backend. If you don't yet have Ollama installed and the four
+default models pulled, `check_setup()` will tell you what's missing.
+
+## 1. Verify setup
+
+```{r, eval=FALSE}
+library(screenllm)
+check_setup()
+```
+
+## 2. Load a corpus
+
+Any tibble with `title` and `abstract` columns works; `read_records()`
+also accepts CSV or XLSX paths and normalises common column-name
+variations (Scopus, Web of Science, EndNote). The package ships with a
+30-record toy dataset drawn from the *Habitat Effect* review used in the
+manuscript, which we use here for demonstration.
+
+```{r}
+library(screenllm)
+toy_path <- system.file("extdata", "toy_habitat_effect.csv", package = "screenllm")
+records <- read_records(toy_path)
+head(records[, c("id", "title")])
+```
+
+## 3. Define the inclusion criteria
+
+```{r}
+criteria <- define_criteria(
+  scope = "Studies that test how surrounding natural habitat influences fish assemblages on artificial reefs",
+  inclusions = c(
+    "The study is conducted in a marine or estuarine environment.",
+    "The study examines fish assemblages or fish performance associated with artificial reefs.",
+    "The surrounding natural habitat is treated as a predictor (independent variable) of the response.",
+    "The study reports fish responses interpreted as artificial-reef performance."
+  )
+)
+print(criteria)
+```
+
+## 4. Rank the corpus
+
+Real screening uses `default_ensemble()`, which talks to Ollama. For this
+vignette we use `backend_mock()` so the code runs without Ollama.
+
+```{r}
+mock_ensemble <- custom_ensemble(
+  models = c("gemma3:27b", "gpt-oss:20b"),
+  replicates = 2,
+  backend = backend_mock()
+)
+ranked <- rank_records(records, criteria, ensemble = mock_ensemble, verbose = FALSE)
+head(ranked[, c("id", "title", "universal_best_score", "rank")])
+```
+
+For a real run, swap the mock for the default:
+
+```{r, eval=FALSE}
+ranked <- rank_records(records, criteria, ensemble = default_ensemble())
+```
+
+## 5. Plan the human screening set
+
+```{r}
+plan <- plan_screening(ranked)
+plan
+```
+
+The `to_screen` element is the tibble of records the reviewer should
+inspect. Everything below the stopping point is treated as excluded.
+
+## 6. Screen and report
+
+Interactive screening via the Shiny app:
+
+```{r, eval=FALSE}
+launch_screening_app(plan, ranked, out_file = "screening_decisions.csv")
+```
+
+Offline screening (spreadsheet round-trip):
+
+```{r, eval=FALSE}
+export_worksheet(plan, path = "to_screen.xlsx")
+# Reviewer fills in the human_decision column and saves as
+# 'to_screen_completed.xlsx'.
+decisions <- read_decisions("to_screen_completed.xlsx")
+```
+
+Summarise the run and surface any strong LLM-human disagreements as a
+manual audit queue:
+
+```{r, eval=FALSE}
+report <- summarise_screening(ranked, decisions, plan = plan)
+print(report)
+
+disagreements <- audit_disagreements(ranked, decisions)
+disagreements
+```

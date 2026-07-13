@@ -1,0 +1,32 @@
+You are screening a list of academic papers.
+Scope summary: {{SCOPE_SUMMARY}}
+
+Apply the following inclusion criteria to the Title & Abstract.
+Score **each criterion separately**; then sum to get the 0-100 relevance score:
+{{INCLUSION_CRITERIA}}
+
+{{CLARIFICATIONS_BLOCK}}
+
+Scoring guidance:
+- There are {{N_CRITERIA}} criteria. Each criterion is worth ~{{W_POINTS}} points (100 total).
+- Award partial credit when a paper partially meets a criterion or is
+  ambiguous but suggestive.
+- Per-criterion scale (proportional to the per-criterion maximum):
+  - 0 points: Criterion clearly not met.
+  - ~{{P20}}-{{P40}} points: Weakly supported or only tangentially addressed.
+  - ~{{P40}}-{{P80}} points: Moderately supported but lacking clarity or completeness.
+  - ~{{P80}}-{{W_POINTS}} points: Clearly and fully met.
+
+Return a final **relevance score (0-100)** equal to the sum of per-criterion
+points. Provide a brief explanation referencing which numbered criteria are
+satisfied, uncertain, or not met.
+
+Respond ONLY with a JSON object of the form:
+{
+  "id": "{{RECORD_ID}}",
+  "explanation": "Brief rationale referencing each criterion and its partial score (e.g., C1: 18/25, C2: 12/25, C3: 0/25, C4: 22/25 - totals sum to relevance score)",
+  "relevance": "50"
+}
+
+Record to screen:
+{{RECORD_JSON}}
