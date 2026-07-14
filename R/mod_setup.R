@@ -33,22 +33,32 @@ mod_setup_ui <- function(id) {
         )
       )
     ),
-    # ---- RIGHT: ollama + ensemble (consolidated) -----------------------
-    bslib::layout_column_wrap(
-      width = 1,
-      gap = "0.5rem",
-      # Compact Ollama status: single row with badge + refresh
+    # ---- RIGHT: ollama status + pull-any strip, then ensemble --------
+    shiny::tags$div(
+      class = "d-flex flex-column gap-2 h-100",
+      # Slim top strip: Ollama status + inline pull-any-model
       shiny::tags$div(
         class = "d-flex align-items-center gap-2 py-1 px-2 border rounded",
-        shiny::tags$small("Ollama:"),
+        shiny::tags$small(class = "text-nowrap", "Ollama:"),
         shiny::uiOutput(ns("ollama_badge"), inline = TRUE),
-        shiny::tags$div(class = "ms-auto",
-          shiny::actionButton(ns("refresh_ollama"), "Refresh",
-                              class = "btn-sm btn-outline-secondary")
-        )
+        shiny::actionButton(ns("refresh_ollama"), "Refresh",
+                            class = "btn-sm btn-outline-secondary"),
+        shiny::tags$div(class = "vr mx-2"),
+        shiny::tags$small(class = "text-muted text-nowrap", "Pull model:"),
+        shiny::tags$div(
+          class = "flex-grow-1",
+          shiny::textInput(ns("pull_tag"), NULL,
+                           placeholder = "e.g. gemma3:27b",
+                           width = "100%")
+        ),
+        shiny::actionButton(ns("pull_btn"), "Pull",
+                            class = "btn-sm btn-outline-primary")
       ),
-      # Main ensemble card: preset radio + unified model list + save
+      # Any active pull progress banner (rendered by pull_progress_ui)
+      shiny::uiOutput(ns("pull_progress_ui")),
+      # Main ensemble card fills all remaining vertical space.
       bslib::card(
+        class = "flex-grow-1",
         bslib::card_header("Choose ensemble"),
         bslib::card_body(
           shiny::radioButtons(
@@ -60,10 +70,7 @@ mod_setup_ui <- function(id) {
             ),
             selected = "default", inline = FALSE
           ),
-          # Unified model list: for paper/light shows preset models with
-          # install status; for custom shows installed models as checkboxes.
           shiny::uiOutput(ns("model_list")),
-          # For custom mode only: replicates input
           shiny::conditionalPanel(
             condition = sprintf("input['%s'] == 'custom'", ns("ensemble_mode")),
             shiny::numericInput(ns("replicates"), "Replicates per model:",
@@ -81,29 +88,6 @@ mod_setup_ui <- function(id) {
                                   class = "btn-success w-100")
             )
           )
-        )
-      ),
-      # Small "pull any model" utility, for power users
-      bslib::card(
-        bslib::card_header(
-          shiny::tags$small(class = "text-muted", "Pull any other model")
-        ),
-        bslib::card_body(
-          class = "py-2",
-          shiny::fluidRow(
-            shiny::column(
-              8,
-              shiny::textInput(ns("pull_tag"), NULL,
-                               placeholder = "e.g. gemma3:27b",
-                               width = "100%")
-            ),
-            shiny::column(
-              4,
-              shiny::actionButton(ns("pull_btn"), "Pull",
-                                  class = "btn-outline-primary w-100")
-            )
-          ),
-          shiny::uiOutput(ns("pull_progress_ui"))
         )
       )
     )
@@ -218,10 +202,14 @@ mod_setup_server <- function(id, state) {
           } else {
             shiny::tags$span(class = "badge bg-warning text-dark ms-2", "missing")
           }
-          shiny::tags$li(class = "list-group-item py-1 px-2",
+          shiny::tags$li(class = "list-group-item py-2 px-3 d-flex align-items-center",
                          shiny::tags$code(m), badge)
         })
-        shiny::tags$ul(class = "list-group list-group-flush mb-2", rows)
+        shiny::tags$div(
+          shiny::tags$label(class = "form-label small text-muted mb-1",
+                            "Models in this preset:"),
+          shiny::tags$ul(class = "list-group mb-2", rows)
+        )
       }
     })
 
