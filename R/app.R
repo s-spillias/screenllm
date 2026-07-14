@@ -57,16 +57,10 @@ app_server <- function(input, output, session, initial_project = NULL) {
     rank_handle = NULL
   )
 
-  # Rehydrate whatever artefacts are already on disk for the initial
-  # project, so a returning user immediately sees their prior work.
-  if (!is.null(initial_project) && initial_project %in% list_projects()) {
-    state$records <- load_artefact(initial_project, "records")
-    state$criteria <- load_artefact(initial_project, "criteria")
-    state$ensemble <- load_artefact(initial_project, "ensemble")
-    state$ranked <- load_artefact(initial_project, "ranked")
-    state$plan <- load_artefact(initial_project, "plan")
-    state$decisions <- load_artefact(initial_project, "decisions")
-  }
+  # The Setup module owns "load a project's artefacts" so it can also
+  # restore Setup-tab UI state (ensemble radio + custom checkboxes)
+  # from the saved ensemble. We just set state$project here; the Setup
+  # module observes it and does the rest.
 
   output$project_badge <- shiny::renderText({
     if (is.null(state$project)) "no project" else paste0("project: ", state$project)

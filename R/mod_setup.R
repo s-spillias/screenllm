@@ -115,30 +115,86 @@ mod_setup_server <- function(id, state) {
       )
     })
 
-    # Pick or create a project.
+    # Load every saved artefact for a project and restore the ensemble
+    # radio/checkboxes so the UI reflects what's on disk.
+    load_project_into_state <- function(proj, notify = TRUE) {
+      if (is.null(proj) || !nzchar(proj)) return(invisible())
+      state$project   <- proj
+      state$records   <- load_artefact(proj, "records")
+      state$criteria  <- load_artefact(proj, "criteria")
+      state$ensemble  <- load_artefact(proj, "ensemble")
+      state$ranked    <- load_artefact(proj, "ranked")
+      state$plan      <- load_artefact(proj, "plan")
+      state$decisions <- load_artefact(proj, "decisions")
+      # Restore the ensemble UI to match what was saved.
+      restore_ensemble_ui(state$ensemble)
+      if (notify) {
+        shiny::showNotification(
+          sprintf("Loaded project: %s", proj), duration = 3
+        )
+      }
+    }
+
+    # Match a saved ensemble against the two presets by comparing model
+    # sets. If no preset matches exactly, treat as custom.
+    restore_ensemble_ui <- function(ens) {
+      if (is.null(ens)) return(invisible())
+      mode <- if (setequal(ens$models, .PINNED_DEFAULT_MODELS)) {
+        "default"
+      } else if (setequal(ens$models, .PINNED_LIGHT_MODELS)) {
+        "light"
+      } else {
+        "custom"
+      }
+      shiny::updateRadioButtons(session, "ensemble_mode", selected = mode)
+      if (identical(mode, "custom")) {
+        # `model_list` is re-rendered on radio change, and it uses the
+        # last input$custom_models as the initial selection. Push the
+        # saved selection so the checkboxes populate correctly.
+        shiny::updateCheckboxGroupInput(
+          session, "custom_models",
+          choices = shiny::isolate(ollama_state()$installed),
+          selected = ens$models
+        )
+        shiny::updateNumericInput(session, "replicates",
+                                   value = ens$replicates)
+      }
+    }
+
+    # Auto-load when the user picks a project from the dropdown -
+    # requiring a "Create" click was surprising.
+    shiny::observeEvent(input$project_select, ignoreInit = TRUE, {
+      sel <- input$project_select
+      if (is.null(sel) || !nzchar(sel) || identical(sel, "(none)")) return()
+      if (identical(sel, state$project)) return()  # no-op on initial sync
+      load_project_into_state(sel)
+    })
+
+    # At session start, if the app was launched with an initial
+    # project (either via launch_app(project = "...") or because the
+    # state already has one set), load its artefacts and restore the
+    # Setup-tab UI. This is a one-shot: it runs once at module init.
+    shiny::isolate({
+      init_proj <- state$project
+      if (!is.null(init_proj) && init_proj %in% list_projects()) {
+        load_project_into_state(init_proj, notify = FALSE)
+      }
+    })
+
+    # Explicit Create button: creates the project directory if a name
+    # was typed, or (re)loads the dropdown selection.
     shiny::observeEvent(input$create_project, {
       new <- trimws(input$new_project)
       if (nzchar(new)) {
         project_dir(new, create = TRUE)
-        state$project <- slugify_project_name(new)
+        proj <- slugify_project_name(new)
         shiny::updateTextInput(session, "new_project", value = "")
+        load_project_into_state(proj)
       } else {
         sel <- input$project_select
         if (!identical(sel, "(none)") && !is.null(sel) && nzchar(sel)) {
-          state$project <- sel
+          load_project_into_state(sel)
         }
-      }
-      # Rehydrate saved artefacts, if any.
-      if (!is.null(state$project)) {
-        state$records <- load_artefact(state$project, "records")
-        state$criteria <- load_artefact(state$project, "criteria")
-        state$ensemble <- load_artefact(state$project, "ensemble")
-        state$ranked <- load_artefact(state$project, "ranked")
-        state$plan <- load_artefact(state$project, "plan")
-        state$decisions <- load_artefact(state$project, "decisions")
-        shiny::showNotification(
-          sprintf("Selected project: %s", state$project), duration = 3
-        )
       }
     })
 
