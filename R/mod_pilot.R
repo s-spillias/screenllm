@@ -143,6 +143,13 @@ mod_pilot_server <- function(id, state) {
                     length(st$results)),
             type = "message", duration = 5
           )
+          # Persist the completed pilot to the project so it survives
+          # app restarts and comes back when the project is reloaded.
+          final_tbl <- pilot_results_as_tibble(st$results)
+          state$pilot <- final_tbl
+          if (!is.null(state$project)) {
+            save_artefact(state$project, "pilot", final_tbl)
+          }
           completion_fired(TRUE)
         } else if (identical(st$status, "error") &&
                      !isTRUE(completion_fired())) {
@@ -192,13 +199,36 @@ mod_pilot_server <- function(id, state) {
       )
     })
 
-    # Build the current partial-results tibble from the polled status.
-    # This is what the results DT renders; it grows one row at a time
-    # as the worker appends to the progress file.
+    # Build the current partial-results tibble. While a job is
+    # running, this is the streaming state read from the progress
+    # file; otherwise we fall back to the persisted state$pilot so
+    # results survive app restarts.
     partial <- shiny::reactive({
       st <- pilot_status()
-      if (is.null(st) || length(st$results) == 0L) return(NULL)
-      pilot_results_as_tibble(st$results)
+      if (!is.null(st) && length(st$results) > 0L) {
+        return(pilot_results_as_tibble(st$results))
+      }
+      state$pilot
+    })
+
+    # Track the *record id* of the selected row, not the row index.
+    # When new records stream in and the table re-renders, the row
+    # index for a given record can shift (a fresh top-scored record
+    # bumps others down). Keying by id lets us re-apply the selection
+    # to the same record after every re-render, so the detail panel
+    # below never resets while the user is reading.
+    selected_id <- shiny::reactiveVal(NULL)
+
+    shiny::observeEvent(input$results_table_rows_selected,
+                        ignoreNULL = FALSE, {
+      sel <- input$results_table_rows_selected
+      if (length(sel) == 0L) return()
+      p <- shiny::isolate(partial())
+      if (is.null(p) || nrow(p) == 0L) return()
+      p_sorted <- p[order(-p$universal_best_score), , drop = FALSE]
+      if (sel[1L] >= 1L && sel[1L] <= nrow(p_sorted)) {
+        selected_id(as.character(p_sorted$id[sel[1L]]))
+      }
     })
 
     output$results_table <- DT::renderDT({
@@ -218,23 +248,33 @@ mod_pilot_server <- function(id, state) {
         justification_preview = preview,
         stringsAsFactors = FALSE
       )
+      # Reapply the previous selection to the same record id, if any.
+      sid <- shiny::isolate(selected_id())
+      preselect <- if (!is.null(sid)) which(p$id == sid) else integer(0)
       DT::datatable(
         tbl,
         options = list(pageLength = 15, autoWidth = FALSE, scrollX = TRUE),
-        rownames = FALSE, selection = "single",
+        rownames = FALSE,
+        selection = list(mode = "single", selected = preselect),
         class = "compact"
       )
     })
 
     output$details <- shiny::renderUI({
       p <- partial()
-      sel <- input$results_table_rows_selected
-      if (is.null(p) || nrow(p) == 0L || is.null(sel) || length(sel) == 0L) {
+      sid <- selected_id()
+      if (is.null(p) || nrow(p) == 0L || is.null(sid)) {
         return(shiny::tags$p(class = "text-muted fst-italic small mt-2",
                              "No row selected."))
       }
-      p <- p[order(-p$universal_best_score), , drop = FALSE]
-      rec <- p[sel[1L], ]
+      # Look up the record by id (order-independent) so the detail
+      # panel doesn't lose its record when new rows re-sort the table.
+      idx <- which(p$id == sid)
+      if (length(idx) == 0L) {
+        return(shiny::tags$p(class = "text-muted fst-italic small mt-2",
+                             "(record not found)"))
+      }
+      rec <- p[idx[1L], ]
       js <- rec$justifications[[1L]]
       if (is.null(js) || nrow(js) == 0L) {
         return(shiny::tags$p(class = "text-muted fst-italic small mt-2",

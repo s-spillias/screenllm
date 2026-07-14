@@ -15,19 +15,22 @@
 #' @param ensemble A `screenllm_ensemble` object.
 #' @param seconds_per_call Optional override for the per-call cost.
 #'   When `NULL` (the default) a heuristic based on the largest model
-#'   in the ensemble is used.
+#'   in the ensemble is used, adjusted downward if a GPU is detected.
+#' @param gpu Whether to assume GPU inference. `NULL` (the default)
+#'   calls [detect_gpu()] to auto-detect. Pass `TRUE` or `FALSE` to
+#'   override.
 #' @return A `screenllm_estimate` object: a list with `n_calls`,
-#'   `seconds_per_call`, `seconds_total`, `human_readable`, and a
-#'   `caveats` character vector.
+#'   `seconds_per_call`, `seconds_total`, `human_readable`, `gpu`,
+#'   and a `caveats` character vector.
 #' @export
 #' @examples
 #' ens <- default_ensemble(backend = backend_mock())
-#' estimate_runtime(n_records = 500, ensemble = ens)
-#' estimate_runtime(n_records = 500, ensemble = default_ensemble_light(
-#'   backend = backend_mock()))
+#' estimate_runtime(n_records = 500, ensemble = ens, gpu = FALSE)
+#' estimate_runtime(n_records = 500, ensemble = ens, gpu = TRUE)
 estimate_runtime <- function(n_records,
                              ensemble,
-                             seconds_per_call = NULL) {
+                             seconds_per_call = NULL,
+                             gpu = NULL) {
   stopifnot(
     length(n_records) == 1L, is.numeric(n_records), n_records >= 0L,
     inherits(ensemble, "screenllm_ensemble")
@@ -35,14 +38,26 @@ estimate_runtime <- function(n_records,
   n_calls <- as.integer(n_records) *
     length(ensemble$models) * as.integer(ensemble$replicates)
 
+  # Resolve the GPU flag once so the caveats can reference it.
+  if (is.null(gpu)) {
+    gpu_info <- detect_gpu()
+    gpu <- isTRUE(gpu_info$available)
+    gpu_detail <- gpu_info$detail
+  } else {
+    gpu_detail <- if (isTRUE(gpu)) "GPU assumed (override)." else
+      "CPU assumed (override)."
+  }
+
   if (is.null(seconds_per_call)) {
-    # Heuristic: biggest model in the ensemble dominates. A 20-30 B
-    # Q4 model at Ollama on a modest laptop is roughly ~8 s/call for
-    # a screening prompt; a 4-7 B is roughly ~3 s/call. GPU inference
-    # can be 5-10x faster.
+    # Heuristic: biggest model dominates.
+    # CPU inference on Ollama, at Q4 quantisation, on a mid-range laptop:
+    #   20-30 B model: ~8 s/call, 7-13 B: ~4 s/call, 3-4 B: ~3 s/call.
+    # GPU inference (Apple Silicon, mid-range NVIDIA, AMD Radeon):
+    #   roughly 4x faster across the board (a coarse average).
     sizes <- vapply(ensemble$models, model_size_hint, numeric(1))
     biggest <- max(sizes, na.rm = TRUE)
-    seconds_per_call <- if (biggest >= 20) 8 else if (biggest >= 7) 4 else 3
+    cpu_cost <- if (biggest >= 20) 8 else if (biggest >= 7) 4 else 3
+    seconds_per_call <- if (isTRUE(gpu)) cpu_cost / 4 else cpu_cost
   }
 
   seconds_total <- n_calls * seconds_per_call
@@ -53,9 +68,10 @@ estimate_runtime <- function(n_records,
       seconds_per_call = seconds_per_call,
       seconds_total = seconds_total,
       human_readable = format_duration(seconds_total),
+      gpu = gpu,
       caveats = c(
+        gpu_detail,
         "Coarse heuristic; real runtime depends on hardware and Ollama load.",
-        "GPU inference is often 5-10x faster than the built-in defaults.",
         "Cached records from a prior run take negligible time."
       )
     ),

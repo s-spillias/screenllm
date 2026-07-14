@@ -54,6 +54,7 @@ app_server <- function(input, output, session, initial_project = NULL) {
     ranked = NULL,
     plan = NULL,
     decisions = NULL,
+    pilot = NULL,
     rank_handle = NULL
   )
 

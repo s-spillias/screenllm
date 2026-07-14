@@ -128,6 +128,64 @@ install.packages("rmarkdown")
 
 Restart R (`Ctrl+Shift+F10` in RStudio) and try again.
 
+## GPU is not being used
+
+Ollama automatically uses a GPU if one is available and the drivers
+are installed. If the Setup tab's GPU badge shows "none" or your
+runtime estimate looks like a CPU-only number (many hours instead of
+tens of minutes), check the following.
+
+### macOS
+
+- Apple Silicon (M1/M2/M3/M4) is used automatically via Metal. No
+  setup needed. Intel Macs run on CPU.
+- If you're on Apple Silicon and the badge still shows "none":
+  update Ollama (`brew upgrade ollama`) and restart it.
+
+### Linux / Windows with NVIDIA
+
+- Install a recent NVIDIA driver (515+ recommended).
+- Confirm the driver is loaded by running `nvidia-smi` in a
+  terminal. If that command isn't found or errors, the driver isn't
+  installed correctly.
+- Confirm Ollama sees the GPU: `ollama ps` after loading a model
+  should show a non-zero `SIZE (GPU)` column.
+- If `nvidia-smi` works but `ollama ps` shows 0 GPU usage, restart
+  the Ollama server (`ollama serve` in a fresh terminal, or restart
+  the tray app).
+
+### Linux with AMD
+
+- Install ROCm (see <https://rocm.docs.amd.com>). Not all AMD GPUs
+  are supported.
+- Confirm `rocm-smi` works.
+- Set the `HSA_OVERRIDE_GFX_VERSION` env var if your GPU model
+  needs it (check Ollama's ROCm docs).
+
+### Verifying at runtime
+
+While a `screenllm` pilot or ranking is in progress, open a terminal
+and run:
+
+```sh
+ollama ps
+```
+
+The row for each running model has a `SIZE (GPU)` column showing how
+many bytes are loaded to VRAM. If it's the same as the total model
+size, everything is on GPU; if it's a fraction, Ollama split it
+between GPU and CPU because the model was too big for available
+VRAM; if it's zero, Ollama is running on CPU.
+
+### Not enough VRAM
+
+Ollama gracefully falls back to CPU if a model doesn't fit. Options:
+- Switch to the light preset (~10 GB total, models fit in 8 GB VRAM).
+- Pull smaller variants: `mistral:7b-instruct-q4_K_S` uses ~4 GB
+  VRAM vs `mistral:7b`'s ~5 GB, at a small accuracy cost.
+- Close other GPU-using applications (browsers with hardware
+  acceleration, video calls, other ML processes).
+
 ## When you're truly stuck
 
 Open a GitHub issue at

@@ -4,7 +4,7 @@
 \alias{estimate_runtime}
 \title{Estimate wall-clock time for a ranking run}
 \usage{
-estimate_runtime(n_records, ensemble, seconds_per_call = NULL)
+estimate_runtime(n_records, ensemble, seconds_per_call = NULL, gpu = NULL)
 }
 \arguments{
 \item{n_records}{Number of records in the corpus.}
@@ -13,12 +13,16 @@ estimate_runtime(n_records, ensemble, seconds_per_call = NULL)
 
 \item{seconds_per_call}{Optional override for the per-call cost.
 When \code{NULL} (the default) a heuristic based on the largest model
-in the ensemble is used.}
+in the ensemble is used, adjusted downward if a GPU is detected.}
+
+\item{gpu}{Whether to assume GPU inference. \code{NULL} (the default)
+calls \code{\link[=detect_gpu]{detect_gpu()}} to auto-detect. Pass \code{TRUE} or \code{FALSE} to
+override.}
 }
 \value{
 A \code{screenllm_estimate} object: a list with \code{n_calls},
-\code{seconds_per_call}, \code{seconds_total}, \code{human_readable}, and a
-\code{caveats} character vector.
+\code{seconds_per_call}, \code{seconds_total}, \code{human_readable}, \code{gpu},
+and a \code{caveats} character vector.
 }
 \description{
 Rough back-of-the-envelope estimator to tell a user "this is going
@@ -35,7 +39,6 @@ order-of-magnitude sanity check, not a promise.
 }
 \examples{
 ens <- default_ensemble(backend = backend_mock())
-estimate_runtime(n_records = 500, ensemble = ens)
-estimate_runtime(n_records = 500, ensemble = default_ensemble_light(
-  backend = backend_mock()))
+estimate_runtime(n_records = 500, ensemble = ens, gpu = FALSE)
+estimate_runtime(n_records = 500, ensemble = ens, gpu = TRUE)
 }

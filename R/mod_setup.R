@@ -36,13 +36,16 @@ mod_setup_ui <- function(id) {
     # ---- RIGHT: ollama status + pull-any strip, then ensemble --------
     shiny::tags$div(
       class = "d-flex flex-column gap-2 h-100",
-      # Slim top strip: Ollama status + inline pull-any-model
+      # Slim top strip: Ollama status + GPU badge + inline pull-any-model
       shiny::tags$div(
         class = "d-flex align-items-center gap-2 py-1 px-2 border rounded",
         shiny::tags$small(class = "text-nowrap", "Ollama:"),
         shiny::uiOutput(ns("ollama_badge"), inline = TRUE),
         shiny::actionButton(ns("refresh_ollama"), "Refresh",
                             class = "btn-sm btn-outline-secondary"),
+        shiny::tags$div(class = "vr mx-2"),
+        shiny::tags$small(class = "text-nowrap", "GPU:"),
+        shiny::uiOutput(ns("gpu_badge"), inline = TRUE),
         shiny::tags$div(class = "vr mx-2"),
         shiny::tags$small(class = "text-muted text-nowrap", "Pull model:"),
         shiny::tags$div(
@@ -126,6 +129,7 @@ mod_setup_server <- function(id, state) {
       state$ranked    <- load_artefact(proj, "ranked")
       state$plan      <- load_artefact(proj, "plan")
       state$decisions <- load_artefact(proj, "decisions")
+      state$pilot     <- load_artefact(proj, "pilot")
       # Restore the ensemble UI to match what was saved.
       restore_ensemble_ui(state$ensemble)
       if (notify) {
@@ -220,6 +224,21 @@ mod_setup_server <- function(id, state) {
       colour <- if (isTRUE(s$up)) "success" else "danger"
       msg <- if (isTRUE(s$up)) "reachable" else "not reachable"
       shiny::tags$span(class = sprintf("badge bg-%s", colour), msg)
+    })
+
+    # GPU detection is a system-level probe (nvidia-smi / rocm-smi /
+    # Apple Silicon), independent of Ollama. Cached for the session --
+    # the answer does not change while the app is open.
+    gpu_info <- shiny::reactive(detect_gpu())
+
+    output$gpu_badge <- shiny::renderUI({
+      g <- gpu_info()
+      colour <- if (isTRUE(g$available)) "success" else "secondary"
+      label <- if (isTRUE(g$available)) g$kind else "none"
+      shiny::tags$span(
+        class = sprintf("badge bg-%s", colour),
+        title = g$detail, label
+      )
     })
 
     # ---- Unified model list --------------------------------------------
