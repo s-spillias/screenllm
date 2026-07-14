@@ -34,6 +34,7 @@ Suggests:
     bslib,
     DT,
     callr,
+    later,
     writexl,
     readxl,
     testthat (>= 3.0.0),

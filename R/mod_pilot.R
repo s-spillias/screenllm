@@ -28,6 +28,7 @@ mod_pilot_ui <- function(id) {
     ),
     bslib::card(
       bslib::card_header("Pilot results"),
+      shiny::uiOutput(ns("running_banner")),
       DT::DTOutput(ns("results_table")),
       shiny::tags$hr(),
       shiny::tags$small(
@@ -60,24 +61,65 @@ mod_pilot_server <- function(id, state) {
     })
 
     pilot_out <- shiny::reactiveVal(NULL)
+    # Signals to the UI that a pilot is currently running so the user
+    # gets an immediate spinner. `later::later()` defers the blocking
+    # pilot() call by one event-loop tick so Shiny flushes the "running"
+    # UI update to the client before the pilot begins.
+    pilot_running <- shiny::reactiveVal(FALSE)
 
     shiny::observeEvent(input$run, {
       shiny::req(state$records, state$criteria, state$ensemble)
-      shiny::withProgress(message = "Piloting ensemble...", value = 0.5, {
+      if (isTRUE(pilot_running())) return(NULL)  # ignore double-click
+      pilot_running(TRUE)
+      shiny::showNotification(
+        sprintf("Pilot started (%d records x %d models). The app may pause briefly...",
+                as.integer(input$n), length(state$ensemble$models)),
+        id = "pilot_running_toast", duration = NULL, closeButton = FALSE,
+        type = "message"
+      )
+      # Snapshot the inputs so the deferred call is decoupled from
+      # any reactive re-runs.
+      records  <- state$records
+      criteria <- state$criteria
+      ensemble <- state$ensemble
+      n_val    <- as.integer(input$n)
+      rand_val <- isTRUE(input$random)
+
+      later::later(function() {
         out <- try(
-          pilot(state$records, state$criteria,
-                ensemble = state$ensemble,
-                n = as.integer(input$n),
-                sample = isTRUE(input$random),
-                verbose = FALSE),
+          pilot(records, criteria, ensemble = ensemble,
+                n = n_val, sample = rand_val, verbose = FALSE),
           silent = TRUE
         )
-      })
-      if (inherits(out, "try-error")) {
-        shiny::showNotification(attr(out, "condition")$message, type = "error")
-        return(NULL)
-      }
-      pilot_out(out)
+        shiny::removeNotification("pilot_running_toast")
+        pilot_running(FALSE)
+        if (inherits(out, "try-error")) {
+          shiny::showNotification(attr(out, "condition")$message,
+                                  type = "error", duration = 8)
+          return(NULL)
+        }
+        pilot_out(out)
+        shiny::showNotification(
+          sprintf("Pilot complete: %d records scored.", nrow(out)),
+          type = "message", duration = 4
+        )
+      }, delay = 0.05)
+    })
+
+    # Visible banner in the results panel while the pilot is running,
+    # so the user has an immediate signal that their click was received.
+    output$running_banner <- shiny::renderUI({
+      if (!isTRUE(pilot_running())) return(NULL)
+      shiny::tags$div(
+        class = "alert alert-info d-flex align-items-center py-2 my-2",
+        shiny::tags$span(class = "spinner-border spinner-border-sm me-2",
+                         role = "status"),
+        shiny::tags$span(
+          shiny::tags$strong("Piloting..."),
+          " scoring records now. This freezes the app for a few seconds ",
+          "(with the light preset) up to a few minutes (with the paper preset)."
+        )
+      )
     })
 
     # Render the pilot output as a sortable DT (score-ordered) so the

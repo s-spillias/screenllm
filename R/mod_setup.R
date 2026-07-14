@@ -5,69 +5,49 @@ mod_setup_ui <- function(id) {
   ns <- shiny::NS(id)
   bslib::layout_columns(
     col_widths = c(4, 8),
-    # -- LEFT: project picker ------------------------------------------------
+    # ---- LEFT: project (compact) ----------------------------------------
     bslib::card(
       bslib::card_header("Project"),
       bslib::card_body(
         shiny::selectizeInput(
-          ns("project_select"), "Existing project:",
-          choices = NULL, options = list(placeholder = "(none)")
+          ns("project_select"), NULL,
+          choices = NULL, options = list(placeholder = "(select existing project)")
         ),
-        shiny::textInput(ns("new_project"), "Or create a new project:",
-                         placeholder = "e.g. my-review-2026"),
-        shiny::actionButton(ns("create_project"), "Create / select",
-                            class = "btn-primary"),
-        shiny::hr(),
-        shiny::helpText(shiny::em("Projects live under:")),
-        shiny::verbatimTextOutput(ns("data_root_display"))
+        shiny::fluidRow(
+          shiny::column(
+            8,
+            shiny::textInput(ns("new_project"), NULL,
+                             placeholder = "or new project name")
+          ),
+          shiny::column(
+            4,
+            shiny::actionButton(ns("create_project"), "Create",
+                                class = "btn-primary w-100")
+          )
+        ),
+        shiny::tags$small(
+          class = "text-muted d-block mt-2",
+          "Data dir: ",
+          shiny::tags$code(shiny::textOutput(ns("data_root_display"),
+                                              inline = TRUE))
+        )
       )
     ),
-    # -- RIGHT: Ollama status + models + pull + ensemble config -------------
+    # ---- RIGHT: ollama + ensemble (consolidated) -----------------------
     bslib::layout_column_wrap(
       width = 1,
-      heights_equal = "row",
-      gap = "0.75rem",
-      # Ollama status card
-      bslib::card(
-        bslib::card_header("Ollama status"),
-        bslib::card_body(
-          class = "d-flex align-items-center gap-3",
-          shiny::uiOutput(ns("ollama_badge"), inline = TRUE),
+      gap = "0.5rem",
+      # Compact Ollama status: single row with badge + refresh
+      shiny::tags$div(
+        class = "d-flex align-items-center gap-2 py-1 px-2 border rounded",
+        shiny::tags$small("Ollama:"),
+        shiny::uiOutput(ns("ollama_badge"), inline = TRUE),
+        shiny::tags$div(class = "ms-auto",
           shiny::actionButton(ns("refresh_ollama"), "Refresh",
                               class = "btn-sm btn-outline-secondary")
         )
       ),
-      # Installed-models card (bounded height so it never overflows)
-      bslib::card(
-        bslib::card_header("Installed models"),
-        bslib::card_body(
-          min_height = "200px",
-          max_height = "260px",
-          DT::DTOutput(ns("models_table"))
-        )
-      ),
-      # Pull-a-model card
-      bslib::card(
-        bslib::card_header("Pull a model"),
-        bslib::card_body(
-          shiny::fluidRow(
-            shiny::column(
-              8,
-              shiny::textInput(ns("pull_tag"), NULL,
-                               placeholder = "e.g. gemma3:27b",
-                               width = "100%")
-            ),
-            shiny::column(
-              4,
-              shiny::actionButton(ns("pull_btn"), "Pull",
-                                  class = "btn-outline-primary",
-                                  width = "100%")
-            )
-          ),
-          shiny::uiOutput(ns("pull_progress_ui"))
-        )
-      ),
-      # Ensemble config card
+      # Main ensemble card: preset radio + unified model list + save
       bslib::card(
         bslib::card_header("Choose ensemble"),
         bslib::card_body(
@@ -80,18 +60,50 @@ mod_setup_ui <- function(id) {
             ),
             selected = "default", inline = FALSE
           ),
-          shiny::uiOutput(ns("ensemble_hint")),
+          # Unified model list: for paper/light shows preset models with
+          # install status; for custom shows installed models as checkboxes.
+          shiny::uiOutput(ns("model_list")),
+          # For custom mode only: replicates input
           shiny::conditionalPanel(
             condition = sprintf("input['%s'] == 'custom'", ns("ensemble_mode")),
-            shiny::selectizeInput(
-              ns("custom_models"), "Models:", choices = NULL, multiple = TRUE,
-              width = "100%"
-            ),
             shiny::numericInput(ns("replicates"), "Replicates per model:",
                                 value = 3, min = 1, max = 5, width = "100%")
           ),
-          shiny::actionButton(ns("save_ensemble"), "Save ensemble config",
-                              class = "btn-success")
+          shiny::tags$hr(class = "my-2"),
+          shiny::fluidRow(
+            shiny::column(
+              6,
+              shiny::uiOutput(ns("pull_missing_ui"))
+            ),
+            shiny::column(
+              6,
+              shiny::actionButton(ns("save_ensemble"), "Save ensemble",
+                                  class = "btn-success w-100")
+            )
+          )
+        )
+      ),
+      # Small "pull any model" utility, for power users
+      bslib::card(
+        bslib::card_header(
+          shiny::tags$small(class = "text-muted", "Pull any other model")
+        ),
+        bslib::card_body(
+          class = "py-2",
+          shiny::fluidRow(
+            shiny::column(
+              8,
+              shiny::textInput(ns("pull_tag"), NULL,
+                               placeholder = "e.g. gemma3:27b",
+                               width = "100%")
+            ),
+            shiny::column(
+              4,
+              shiny::actionButton(ns("pull_btn"), "Pull",
+                                  class = "btn-outline-primary w-100")
+            )
+          ),
+          shiny::uiOutput(ns("pull_progress_ui"))
         )
       )
     )
@@ -149,15 +161,15 @@ mod_setup_server <- function(id, state) {
     # ---- Ollama panel --------------------------------------------------
 
     # `ollama_refresh` is bumped whenever we want `ollama_state` to
-    # re-fetch: on button click, on session start (via initial value),
-    # and whenever a pull completes.
+    # re-fetch: on button click, on session start, and on pull complete.
     ollama_refresh <- shiny::reactiveVal(0L)
-    shiny::observeEvent(input$refresh_ollama, ignoreNULL = FALSE, ignoreInit = FALSE, {
+    shiny::observeEvent(input$refresh_ollama,
+                        ignoreNULL = FALSE, ignoreInit = FALSE, {
       ollama_refresh(shiny::isolate(ollama_refresh()) + 1L)
     })
 
     ollama_state <- shiny::reactive({
-      ollama_refresh()  # take a dependency; refetch when bumped
+      ollama_refresh()  # dependency; refetch when bumped
       up <- ollama_health(quiet = TRUE)
       installed <- if (up) ollama_installed_models() else character()
       list(up = up, installed = installed)
@@ -166,52 +178,106 @@ mod_setup_server <- function(id, state) {
     output$ollama_badge <- shiny::renderUI({
       s <- ollama_state()
       colour <- if (isTRUE(s$up)) "success" else "danger"
-      msg <- if (isTRUE(s$up)) "Ollama reachable" else "Ollama not reachable"
+      msg <- if (isTRUE(s$up)) "reachable" else "not reachable"
       shiny::tags$span(class = sprintf("badge bg-%s", colour), msg)
     })
 
-    output$models_table <- DT::renderDT({
+    # ---- Unified model list --------------------------------------------
+
+    output$model_list <- shiny::renderUI({
       s <- ollama_state()
-      if (!isTRUE(s$up) || length(s$installed) == 0) {
-        return(DT::datatable(
-          data.frame(Model = "(none - refresh once Ollama is running)"),
-          options = list(dom = "t", ordering = FALSE),
-          rownames = FALSE, selection = "none"
-        ))
+      mode <- input$ensemble_mode %||% "default"
+      installed <- s$installed
+      if (identical(mode, "custom")) {
+        if (!isTRUE(s$up) || length(installed) == 0L) {
+          return(shiny::tags$div(
+            class = "alert alert-warning py-1 my-1",
+            shiny::tags$small(
+              "No models installed yet. Pull one below, or switch to a preset."
+            )
+          ))
+        }
+        # Preserve any prior selection when re-rendering.
+        selected <- shiny::isolate(input$custom_models) %||% character()
+        selected <- intersect(selected, installed)
+        shiny::checkboxGroupInput(
+          ns("custom_models"),
+          label = shiny::tags$small(class = "text-muted",
+                                    "Include (pick as many as you want):"),
+          choices = installed, selected = selected
+        )
+      } else {
+        wanted <- switch(mode,
+                         default = .PINNED_DEFAULT_MODELS,
+                         light   = .PINNED_LIGHT_MODELS,
+                         character())
+        rows <- lapply(wanted, function(m) {
+          is_installed <- m %in% installed
+          badge <- if (is_installed) {
+            shiny::tags$span(class = "badge bg-success ms-2", "installed")
+          } else {
+            shiny::tags$span(class = "badge bg-warning text-dark ms-2", "missing")
+          }
+          shiny::tags$li(class = "list-group-item py-1 px-2",
+                         shiny::tags$code(m), badge)
+        })
+        shiny::tags$ul(class = "list-group list-group-flush mb-2", rows)
       }
-      DT::datatable(
-        data.frame(Model = s$installed),
-        options = list(
-          dom = "tp",
-          pageLength = 6,
-          scrollY = "180px",
-          scrollCollapse = TRUE,
-          paging = TRUE
-        ),
-        rownames = FALSE, selection = "none", class = "compact"
+    })
+
+    # ---- Pull-missing button + custom pull-any --------------------------
+
+    # State for both pull flows.
+    pulling_model <- shiny::reactiveVal(NULL)
+    notified <- shiny::reactiveVal(character())
+    pull_queue <- shiny::reactiveVal(character())  # for pull-missing
+
+    # Pull-missing button (visible only when preset selected and models missing).
+    output$pull_missing_ui <- shiny::renderUI({
+      mode <- input$ensemble_mode %||% "default"
+      if (identical(mode, "custom")) return(NULL)
+      wanted <- switch(mode,
+                       default = .PINNED_DEFAULT_MODELS,
+                       light   = .PINNED_LIGHT_MODELS,
+                       character())
+      s <- ollama_state()
+      if (!isTRUE(s$up)) return(NULL)
+      missing <- setdiff(wanted, s$installed)
+      if (length(missing) == 0L) {
+        return(shiny::tags$small(class = "text-success",
+                                 "All models installed."))
+      }
+      shiny::actionButton(
+        ns("pull_missing_btn"),
+        sprintf("Pull %d missing", length(missing)),
+        class = "btn-outline-warning w-100"
       )
     })
 
-    # Keep the custom-model picker synced with installed models.
-    shiny::observe({
+    shiny::observeEvent(input$pull_missing_btn, {
+      mode <- input$ensemble_mode %||% "default"
+      wanted <- switch(mode,
+                       default = .PINNED_DEFAULT_MODELS,
+                       light   = .PINNED_LIGHT_MODELS,
+                       character())
       s <- ollama_state()
-      shiny::updateSelectizeInput(session, "custom_models",
-                                   choices = s$installed, server = FALSE)
+      missing <- setdiff(wanted, s$installed)
+      if (length(missing) == 0L) return(NULL)
+      # Queue subsequent models; kick off the first now.
+      pull_queue(missing[-1])
+      start_and_track(missing[1])
     })
 
-    # Track which model this session has an active pull for. Kept as a
-    # single value because the UI exposes one pull box; the underlying
-    # registry (.pull_handles) supports concurrent pulls if needed.
-    pulling_model <- shiny::reactiveVal(NULL)
-
-    # We keep an internal set of models we've already emitted a "done"
-    # notification for, so the poll doesn't fire a Notification every
-    # 500 ms after the pull completes.
-    notified <- shiny::reactiveVal(character())
+    # ---- Pull-any-model button + progress -------------------------------
 
     shiny::observeEvent(input$pull_btn, {
       tag <- trimws(input$pull_tag)
       if (!nzchar(tag)) return(NULL)
+      start_and_track(tag)
+    })
+
+    # Shared launcher used by both pull-missing and pull-any.
+    start_and_track <- function(tag) {
       handle <- try(start_pull_job(tag), silent = TRUE)
       if (inherits(handle, "try-error")) {
         shiny::showNotification(attr(handle, "condition")$message,
@@ -223,11 +289,9 @@ mod_setup_server <- function(id, state) {
         sprintf("Started background pull for %s. You can keep using the app.", tag),
         duration = 4
       )
-    })
+    }
 
-    # Poll the pull's progress every 500 ms. Live for as long as there
-    # is a tracked model. Emits a completion notification exactly once
-    # and refreshes the Ollama panel so the model appears in the list.
+    # Poll the pull progress every 500 ms.
     pull_status <- shiny::reactivePoll(
       intervalMillis = 500,
       session = session,
@@ -243,15 +307,17 @@ mod_setup_server <- function(id, state) {
         if (is.null(m)) return(NULL)
         st <- pull_job_status(m)
         if (identical(st$status, "done") && !(m %in% notified())) {
-          shiny::showNotification(
-            sprintf("Pulled %s.", m),
-            type = "message", duration = 6
-          )
+          shiny::showNotification(sprintf("Pulled %s.", m),
+                                  type = "message", duration = 6)
           notified(c(notified(), m))
-          # Trigger a refresh of the installed-models list and the
-          # ensemble-hint banner without needing the user to click.
           ollama_refresh(shiny::isolate(ollama_refresh()) + 1L)
           pulling_model(NULL)
+          # If there are queued models (pull-missing flow), start next.
+          q <- pull_queue()
+          if (length(q) > 0L) {
+            pull_queue(q[-1])
+            start_and_track(q[1])
+          }
         } else if (identical(st$status, "error") && !(m %in% notified())) {
           shiny::showNotification(
             sprintf("Pull %s failed: %s", m, st$error %||% "(no detail)"),
@@ -259,12 +325,14 @@ mod_setup_server <- function(id, state) {
           )
           notified(c(notified(), m))
           pulling_model(NULL)
+          # Abort the queue on error to avoid cascading failures.
+          pull_queue(character())
         }
         st
       }
     )
 
-    # A small live progress banner under the Pull button.
+    # Live progress banner shared across both pull entry points.
     output$pull_progress_ui <- shiny::renderUI({
       st <- pull_status()
       if (is.null(st) || identical(st$status, "idle")) return(NULL)
@@ -281,42 +349,7 @@ mod_setup_server <- function(id, state) {
       )
     })
 
-    # ---- Ensemble config ----------------------------------------------
-
-    # Small hint under the ensemble radios warning about missing models.
-    output$ensemble_hint <- shiny::renderUI({
-      mode <- input$ensemble_mode
-      if (is.null(mode) || identical(mode, "custom")) return(NULL)
-      wanted <- switch(mode,
-                       default = .PINNED_DEFAULT_MODELS,
-                       light   = .PINNED_LIGHT_MODELS,
-                       character())
-      s <- ollama_state()
-      if (!isTRUE(s$up)) return(NULL)
-      missing <- setdiff(wanted, s$installed)
-      if (length(missing) == 0L) {
-        shiny::tags$div(
-          class = "alert alert-success py-1 my-1",
-          shiny::tags$small(sprintf(
-            "All %d models for this preset are installed.", length(wanted)
-          ))
-        )
-      } else {
-        shiny::tags$div(
-          class = "alert alert-warning py-1 my-1",
-          shiny::tags$small(
-            sprintf("%d of %d models not yet installed: ",
-                    length(missing), length(wanted)),
-            shiny::tags$code(paste(missing, collapse = ", ")),
-            ". Pull them one by one above, or in the R console run: ",
-            shiny::tags$code(
-              sprintf('install_prereqs(models = c(%s))',
-                      paste(sprintf('"%s"', missing), collapse = ", "))
-            )
-          )
-        )
-      }
-    })
+    # ---- Save ensemble --------------------------------------------------
 
     shiny::observeEvent(input$save_ensemble, {
       shiny::req(state$project)
@@ -328,7 +361,7 @@ mod_setup_server <- function(id, state) {
           custom  = {
             models <- input$custom_models
             if (length(models) == 0L) {
-              cli::cli_abort("Pick at least one model.")
+              cli::cli_abort("Tick at least one model.")
             }
             custom_ensemble(models = models,
                             replicates = as.integer(input$replicates))
