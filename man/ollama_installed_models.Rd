@@ -4,10 +4,20 @@
 \alias{ollama_installed_models}
 \title{List Ollama models installed on the local server}
 \usage{
-ollama_installed_models(ollama_url = getOption("screenllm.ollama_url"))
+ollama_installed_models(
+  ollama_url = getOption("screenllm.ollama_url"),
+  include_embedding = FALSE
+)
 }
 \arguments{
 \item{ollama_url}{Base URL of the Ollama server.}
+
+\item{include_embedding}{Logical. Include known embedding-only
+models (e.g. \code{mxbai-embed-large}, \code{nomic-embed-text},
+\code{snowflake-arctic-embed}, \code{all-minilm}) in the returned list.
+Defaults to \code{FALSE}; these models do not respond to Ollama's
+\verb{/api/generate} in the shape \code{screenllm} needs, so exposing them
+in a chat-model picker would silently produce all-NA rankings.}
 }
 \value{
 Character vector of model tags. Empty character vector if the

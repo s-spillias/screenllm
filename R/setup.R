@@ -85,11 +85,18 @@ ollama_health <- function(ollama_url = getOption("screenllm.ollama_url"),
 #' List Ollama models installed on the local server
 #'
 #' @param ollama_url Base URL of the Ollama server.
+#' @param include_embedding Logical. Include known embedding-only
+#'   models (e.g. `mxbai-embed-large`, `nomic-embed-text`,
+#'   `snowflake-arctic-embed`, `all-minilm`) in the returned list.
+#'   Defaults to `FALSE`; these models do not respond to Ollama's
+#'   `/api/generate` in the shape `screenllm` needs, so exposing them
+#'   in a chat-model picker would silently produce all-NA rankings.
 #' @return Character vector of model tags. Empty character vector if the
 #'   server is not reachable.
 #' @keywords internal
 ollama_installed_models <- function(
-    ollama_url = getOption("screenllm.ollama_url")) {
+    ollama_url = getOption("screenllm.ollama_url"),
+    include_embedding = FALSE) {
   resp <- try(
     httr2::request(paste0(ollama_url, "/api/tags")) |>
       httr2::req_timeout(5) |>
@@ -99,7 +106,15 @@ ollama_installed_models <- function(
   if (inherits(resp, "try-error")) return(character())
   body <- httr2::resp_body_json(resp, simplifyVector = TRUE)
   if (is.null(body$models) || nrow(body$models) == 0L) return(character())
-  as.character(body$models$name)
+  tags <- as.character(body$models$name)
+  if (isTRUE(include_embedding)) return(tags)
+  # Drop known embedding-model families. The naming isn't strictly
+  # enforced by Ollama; this covers the popular ones.
+  embed_pattern <- paste0(
+    "^(mxbai-embed|nomic-embed|snowflake-arctic-embed|all-minilm|",
+    "bge-|granite-embedding|embeddinggemma)"
+  )
+  tags[!grepl(embed_pattern, tags, ignore.case = TRUE)]
 }
 
 #' One-stop setup for a fresh machine

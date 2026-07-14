@@ -269,6 +269,15 @@ mod_setup_server <- function(id, state) {
 
     # ---- Unified model list --------------------------------------------
 
+    # Auto-refresh the installed-models list whenever the user opens
+    # Custom mode, so a `ollama pull` / `ollama rm` from a terminal
+    # is picked up without needing to click Refresh.
+    shiny::observeEvent(input$ensemble_mode, {
+      if (identical(input$ensemble_mode, "custom")) {
+        ollama_refresh(shiny::isolate(ollama_refresh()) + 1L)
+      }
+    })
+
     output$model_list <- shiny::renderUI({
       s <- ollama_state()
       mode <- input$ensemble_mode %||% "default"
@@ -285,11 +294,23 @@ mod_setup_server <- function(id, state) {
         # Preserve any prior selection when re-rendering.
         selected <- shiny::isolate(input$custom_models) %||% character()
         selected <- intersect(selected, installed)
+        # Enrich each label with the catalog's size hint when known;
+        # unknown tags just show the bare tag.
+        cat <- ollama_catalog()
+        size_by_tag <- stats::setNames(cat$size_gb, cat$tag)
+        labels <- vapply(installed, function(tag) {
+          sz <- size_by_tag[tag]
+          if (is.na(sz)) tag else sprintf("%s  (~%d GB)", tag, sz)
+        }, character(1))
+        choices <- stats::setNames(installed, labels)
         shiny::checkboxGroupInput(
           ns("custom_models"),
-          label = shiny::tags$small(class = "text-muted",
-                                    "Include (pick as many as you want):"),
-          choices = installed, selected = selected
+          label = shiny::tags$small(
+            class = "text-muted",
+            sprintf("Include (pick as many as you want; %d installed):",
+                    length(installed))
+          ),
+          choices = choices, selected = selected
         )
       } else {
         wanted <- switch(mode,
