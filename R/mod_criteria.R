@@ -60,15 +60,30 @@ mod_criteria_server <- function(id, state) {
       ))
     }
 
-    # Rehydrate the form from a saved criteria object, if any.
-    shiny::observeEvent(state$criteria, {
+    # Rehydrate the form from a saved criteria object only when the
+    # active project changes. Triggering on `state$criteria` directly
+    # would fire every time autosave writes back to the same object,
+    # calling updateTextAreaInput and jumping the cursor mid-type.
+    # Guarding by project + a "the form already matches" check breaks
+    # that feedback loop while still restoring on project switch.
+    shiny::observeEvent(state$project, ignoreNULL = TRUE, {
       c <- state$criteria
       if (is.null(c)) return(NULL)
+      current_scope <- shiny::isolate(input$scope %||% "")
+      current_texts <- shiny::isolate(read_inputs(n_criteria(), isolate = TRUE))
+      current_texts <- trimws(current_texts)
+      current_texts <- current_texts[nzchar(current_texts)]
+      # If the form already reflects the saved criteria (e.g. because
+      # this trigger fired as a side effect of an autosave that came
+      # from the form itself), don't push values back and jump the
+      # cursor.
+      if (identical(trimws(current_scope), c$scope) &&
+          identical(current_texts, as.character(c$inclusions))) {
+        return(NULL)
+      }
       shiny::updateTextAreaInput(session, "scope", value = c$scope)
       n_criteria(length(c$inclusions))
       stored_values(as.character(c$inclusions))
-      # Push saved text into the corresponding textareas (in case the UI
-      # has already been rendered with the previous n).
       for (i in seq_along(c$inclusions)) {
         shiny::updateTextAreaInput(session, sprintf("inc_%d", i),
                                     value = c$inclusions[[i]])
@@ -147,16 +162,16 @@ mod_criteria_server <- function(id, state) {
       last_autosave(Sys.time())
     })
 
-    # Autosave: debounce the criteria reactive by 1.5 s so we write to
-    # disk once the user has paused typing, not on every keystroke. Only
-    # fires when the criteria are valid and a project is selected.
+    # Autosave: debounce well past a normal typing pause (4 s) so the
+    # save doesn't fire mid-thought, and only when the criteria are
+    # valid and a project is selected. If the resulting criteria are
+    # already identical to what's on disk (typical when autosave fires
+    # after a save button click), do nothing.
     last_autosave <- shiny::reactiveVal(NULL)
-    autosaved_criteria <- shiny::debounce(current_criteria, millis = 1500)
+    autosaved_criteria <- shiny::debounce(current_criteria, millis = 4000)
     shiny::observe({
       c <- autosaved_criteria()
       if (is.null(c) || is.null(state$project)) return(NULL)
-      # Avoid a redundant write if the current in-memory criteria are
-      # already identical to what's on disk.
       if (identical(c, state$criteria)) return(NULL)
       state$criteria <- c
       save_artefact(state$project, "criteria", c)
