@@ -63,8 +63,8 @@ print.screenllm_report <- function(x, ...) {
 #' Surface strong LLM-human disagreements for a manual audit
 #'
 #' Returns records where the LLM ensemble and the human reviewer disagree
-#' at high confidence. On the Habitat Effect benchmark reported in the
-#' paper, similar audits caught genuine screener errors in 28\% of the
+#' at high confidence. On one of the benchmark reviews reported in the
+#' paper, a similar audit caught genuine screener errors in 28\% of the
 #' disagreements. This is intended as a low-cost quality-control step
 #' after the main screen.
 #'

@@ -17,7 +17,7 @@ mod_corpus_ui <- function(id) {
         "At minimum, the file needs `title` and `abstract` columns."
       ),
       shiny::hr(),
-      shiny::actionButton(ns("use_toy"), "Or load the toy Habitat Effect corpus",
+      shiny::actionButton(ns("use_toy"), "Or load the toy CBFM corpus",
                           class = "btn-outline-secondary"),
       shiny::hr(),
       shiny::uiOutput(ns("summary")),
@@ -88,7 +88,7 @@ mod_corpus_server <- function(id, state) {
 
     shiny::observeEvent(input$use_toy, {
       proj <- ensure_project()
-      toy_path <- system.file("extdata", "toy_habitat_effect.csv",
+      toy_path <- system.file("extdata", "toy_cbfm.csv",
                               package = "screenllm")
       if (!nzchar(toy_path)) {
         shiny::showNotification(

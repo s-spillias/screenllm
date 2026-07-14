@@ -1,8 +1,8 @@
 test_that("rank_records runs end-to-end against the mock backend", {
-  toy_path <- system.file("extdata", "toy_habitat_effect.csv", package = "screenllm")
+  toy_path <- system.file("extdata", "toy_cbfm.csv", package = "screenllm")
   # In devtools::test() the extdata is at inst/extdata; fall back if needed.
   if (!nzchar(toy_path)) {
-    toy_path <- testthat::test_path("../../inst/extdata/toy_habitat_effect.csv")
+    toy_path <- testthat::test_path("../../inst/extdata/toy_cbfm.csv")
   }
   skip_if_not(file.exists(toy_path), "toy dataset not found in this test environment")
 
@@ -33,7 +33,7 @@ test_that("rank_records runs end-to-end against the mock backend", {
 })
 
 test_that("plan_screening returns a stop point and a to-screen subset", {
-  toy_path <- system.file("extdata", "toy_habitat_effect.csv", package = "screenllm")
+  toy_path <- system.file("extdata", "toy_cbfm.csv", package = "screenllm")
   skip_if_not(nzchar(toy_path) && file.exists(toy_path))
   records <- read_records(toy_path)
   criteria <- define_criteria(

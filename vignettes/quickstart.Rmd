@@ -26,14 +26,15 @@ check_setup()
 ## 2. Load a corpus
 
 Any tibble with `title` and `abstract` columns works; `read_records()`
-also accepts CSV or XLSX paths and normalises common column-name
+also accepts CSV, XLSX, or RIS paths and normalises common column-name
 variations (Scopus, Web of Science, EndNote). The package ships with a
-30-record toy dataset drawn from the *Habitat Effect* review used in the
-manuscript, which we use here for demonstration.
+40-record toy dataset drawn from the *Community-Based Fisheries
+Management* (CBFM) review used in the manuscript, which we use here
+for demonstration.
 
 ```{r}
 library(screenllm)
-toy_path <- system.file("extdata", "toy_habitat_effect.csv", package = "screenllm")
+toy_path <- system.file("extdata", "toy_cbfm.csv", package = "screenllm")
 records <- read_records(toy_path)
 head(records[, c("id", "title")])
 ```
@@ -42,12 +43,11 @@ head(records[, c("id", "title")])
 
 ```{r}
 criteria <- define_criteria(
-  scope = "Studies that test how surrounding natural habitat influences fish assemblages on artificial reefs",
+  scope = "Articles potentially relevant to community-based fisheries management (CBFM) in Pacific Island contexts.",
   inclusions = c(
-    "The study is conducted in a marine or estuarine environment.",
-    "The study examines fish assemblages or fish performance associated with artificial reefs.",
-    "The surrounding natural habitat is treated as a predictor (independent variable) of the response.",
-    "The study reports fish responses interpreted as artificial-reef performance."
+    "It is possible that the study includes a case study from a Pacific Island country (e.g. Fiji, Solomon Islands, Vanuatu, Papua New Guinea, Samoa, Tonga, or similar).",
+    "It is possible that the study discusses fisheries and/or marine resource management.",
+    "It is possible that the study discusses a community-based approach."
   )
 )
 print(criteria)

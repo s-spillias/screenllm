@@ -23,8 +23,8 @@ mod_report_ui <- function(id) {
       bslib::card_header("Strong LLM-human disagreements"),
       shiny::helpText(shiny::em(
         "Records where the ensemble was confident but the human decided the ",
-        "opposite. Worth a manual look; on the paper's Habitat Effect benchmark ",
-        "a similar audit caught legitimate reviewer errors in 28% of these."
+        "opposite. Worth a manual look; on one of the paper's benchmark ",
+        "reviews, a similar audit caught legitimate reviewer errors in 28% of these."
       )),
       DT::DTOutput(ns("audit_table")),
       shiny::downloadButton(ns("dl_audit"), "Download disagreements.csv")

@@ -100,15 +100,17 @@ don't need to bring anything.
 - Click "Save ensemble config".
 
 **Tab 2 - Corpus**
-- Click "Or load the toy Habitat Effect corpus". You'll see 40 records
-  appear on the right.
+- Click "Or load the toy CBFM corpus". You'll see 40 records appear on
+  the right. These are drawn from the *Community-Based Fisheries
+  Management* review used in the paper.
 
 **Tab 3 - Criteria**
-- The tab starts with four blank criteria boxes. Fill them in with:
-  1. `The study is conducted in a marine or estuarine environment.`
-  2. `The study examines fish assemblages on artificial reefs.`
-  3. `The surrounding natural habitat is a predictor of the response.`
-  4. `The study reports fish responses.`
+- The tab starts with four blank criteria boxes. Fill them in with (or
+  paste all four at once):
+  1. `It is possible that the study includes a case study from a Pacific Island country (e.g. Fiji, Solomon Islands, Vanuatu, Papua New Guinea, Samoa, Tonga, or similar).`
+  2. `It is possible that the study discusses fisheries and/or marine resource management.`
+  3. `It is possible that the study discusses a community-based approach.`
+- Remove the fourth (blank) criterion with the "- Remove last" button.
 - Watch the right-hand "Rendered LLM prompt" panel update as you type.
 - Notice the small "Auto-saved..." indicator appears near the button.
 - Click "Save criteria" for a hard commit.
