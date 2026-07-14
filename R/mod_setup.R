@@ -50,9 +50,17 @@ mod_setup_ui <- function(id) {
         shiny::tags$small(class = "text-muted text-nowrap", "Pull model:"),
         shiny::tags$div(
           class = "flex-grow-1",
-          shiny::textInput(ns("pull_tag"), NULL,
-                           placeholder = "e.g. gemma3:27b",
-                           width = "100%")
+          shiny::selectizeInput(
+            ns("pull_tag"), NULL, choices = NULL,
+            options = list(
+              # Let the user type any Ollama tag not in the catalog.
+              create = TRUE,
+              createOnBlur = TRUE,
+              placeholder = "pick from list or type any Ollama tag",
+              persist = FALSE
+            ),
+            width = "100%"
+          )
         ),
         shiny::actionButton(ns("pull_btn"), "Pull",
                             class = "btn-sm btn-outline-primary")
@@ -230,6 +238,24 @@ mod_setup_server <- function(id, state) {
     # Apple Silicon), independent of Ollama. Cached for the session --
     # the answer does not change while the app is open.
     gpu_info <- shiny::reactive(detect_gpu())
+
+    # Populate the Pull selectize with the curated catalog. Already-
+    # installed tags are dropped so the user is not encouraged to
+    # re-pull. selectize is configured with create = TRUE so users can
+    # still type any tag not in the catalog.
+    shiny::observe({
+      installed <- ollama_state()$installed
+      cat <- ollama_catalog()
+      cat <- cat[!(cat$tag %in% installed), , drop = FALSE]
+      labels <- sprintf("%s - %s (~%d GB)",
+                        cat$tag, cat$description, cat$size_gb)
+      choices <- stats::setNames(cat$tag, labels)
+      shiny::updateSelectizeInput(
+        session, "pull_tag",
+        choices = c("", choices),
+        server = FALSE
+      )
+    })
 
     output$gpu_badge <- shiny::renderUI({
       g <- gpu_info()
