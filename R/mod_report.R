@@ -12,7 +12,12 @@ mod_report_ui <- function(id) {
       shiny::hr(),
       shiny::downloadButton(ns("dl_decisions"), "Download decisions.csv"),
       shiny::downloadButton(ns("dl_ranked"), "Download ranked corpus (CSV)"),
-      shiny::downloadButton(ns("dl_report"), "Download report (RDS)")
+      shiny::downloadButton(ns("dl_report"), "Download report (RDS)"),
+      shiny::downloadButton(ns("dl_html"), "Download HTML report"),
+      shiny::helpText(shiny::em(
+        "The HTML report is a self-contained document; open it in a ",
+        "browser and use Print > Save as PDF to archive."
+      ))
     ),
     bslib::card(
       bslib::card_header("Strong LLM-human disagreements"),
@@ -90,6 +95,26 @@ mod_report_server <- function(id, state) {
     output$dl_report <- shiny::downloadHandler(
       filename = function() "report.rds",
       content = function(file) saveRDS(report(), file)
+    )
+
+    output$dl_html <- shiny::downloadHandler(
+      filename = function() {
+        proj <- state$project %||% "screenllm"
+        sprintf("%s-screening-report.html", proj)
+      },
+      content = function(file) {
+        shiny::withProgress(message = "Rendering report...", value = 0.5, {
+          export_report(
+            output_file = file,
+            project = state$project,
+            ranked = state$ranked,
+            plan = state$plan,
+            decisions = state$decisions,
+            criteria = state$criteria,
+            ensemble = state$ensemble
+          )
+        })
+      }
     )
 
     output$dl_audit <- shiny::downloadHandler(

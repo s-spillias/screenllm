@@ -19,7 +19,11 @@ mod_criteria_ui <- function(id) {
                                              class = "btn-outline-secondary"))
       ),
       shiny::hr(),
-      shiny::actionButton(ns("save"), "Save criteria", class = "btn-success")
+      shiny::actionButton(ns("save"), "Save criteria", class = "btn-success"),
+      shiny::tags$small(
+        shiny::textOutput(ns("autosave_indicator"), inline = TRUE),
+        class = "text-muted ms-2"
+      )
     ),
     bslib::card(
       bslib::card_header("Rendered LLM prompt (first record preview)"),
@@ -140,6 +144,32 @@ mod_criteria_server <- function(id, state) {
         sprintf("Saved %d inclusion criteria.", length(c$inclusions)),
         duration = 3
       )
+      last_autosave(Sys.time())
+    })
+
+    # Autosave: debounce the criteria reactive by 1.5 s so we write to
+    # disk once the user has paused typing, not on every keystroke. Only
+    # fires when the criteria are valid and a project is selected.
+    last_autosave <- shiny::reactiveVal(NULL)
+    autosaved_criteria <- shiny::debounce(current_criteria, millis = 1500)
+    shiny::observe({
+      c <- autosaved_criteria()
+      if (is.null(c) || is.null(state$project)) return(NULL)
+      # Avoid a redundant write if the current in-memory criteria are
+      # already identical to what's on disk.
+      if (identical(c, state$criteria)) return(NULL)
+      state$criteria <- c
+      save_artefact(state$project, "criteria", c)
+      last_autosave(Sys.time())
+    })
+
+    output$autosave_indicator <- shiny::renderText({
+      t <- last_autosave()
+      if (is.null(t)) return("")
+      # Show only for the first 4 s after a save, then blank out.
+      shiny::invalidateLater(4000)
+      elapsed <- as.numeric(difftime(Sys.time(), t, units = "secs"))
+      if (elapsed > 4) "" else sprintf("Auto-saved %.0fs ago.", elapsed)
     })
   })
 }

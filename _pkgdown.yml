@@ -66,3 +66,4 @@ reference:
   - summarise_screening
   - audit_disagreements
   - export_worksheet
+  - export_report
