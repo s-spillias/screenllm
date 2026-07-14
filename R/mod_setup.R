@@ -137,7 +137,6 @@ mod_setup_server <- function(id, state) {
       state$ranked    <- load_artefact(proj, "ranked")
       state$plan      <- load_artefact(proj, "plan")
       state$decisions <- load_artefact(proj, "decisions")
-      state$pilot     <- load_artefact(proj, "pilot")
       # Restore the ensemble UI to match what was saved.
       restore_ensemble_ui(state$ensemble)
       if (notify) {

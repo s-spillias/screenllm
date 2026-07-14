@@ -4,13 +4,28 @@
 \alias{start_rank_job}
 \title{Start a background ranking job for a project}
 \usage{
-start_rank_job(project, ensemble = default_ensemble())
+start_rank_job(
+  project,
+  ensemble = default_ensemble(),
+  sample_size = NULL,
+  random_sample = TRUE,
+  seed = 1L
+)
 }
 \arguments{
 \item{project}{Project name.}
 
 \item{ensemble}{A \code{screenllm_ensemble} object. Saved into the project
 directory so the worker can read it.}
+
+\item{sample_size}{Optional integer. If supplied and less than the
+number of records, the worker samples \code{sample_size} records
+before ranking. \code{NULL} (default) or \code{0} = all records.}
+
+\item{random_sample}{If sampling, whether to draw at random
+(default \code{TRUE}) or take the first \code{sample_size} rows.}
+
+\item{seed}{Random seed used when \code{random_sample = TRUE}.}
 }
 \value{
 A list with \code{pid} (the worker PID) and \code{handle} (the callr
@@ -20,4 +35,10 @@ process object).
 Spawns a \code{callr::r_bg} subprocess that loads the project's records,
 criteria, and ensemble from disk and runs \code{rank_records()}. Returns
 immediately with a handle the caller can poll or cancel.
+}
+\details{
+Optionally sub-samples the records so the worker only ranks \code{n}
+of them. This is the mechanism the Shiny app uses for "quick pilot"
+runs against a real Ollama backend: same code path as a full rank,
+just fewer records.
 }

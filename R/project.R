@@ -78,8 +78,7 @@ slugify_project_name <- function(name) {
   plan             = "plan.rds",
   decisions        = "decisions.csv",
   progress         = "rank_progress.rds",
-  report           = "report.rds",
-  pilot            = "pilot.rds"
+  report           = "report.rds"
 )
 
 #' Save an artefact into a project directory

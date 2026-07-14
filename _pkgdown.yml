@@ -27,7 +27,6 @@ reference:
 
 - title: Ranking + stopping
   contents:
-  - pilot
   - rank_records
   - plan_screening
   - estimate_runtime

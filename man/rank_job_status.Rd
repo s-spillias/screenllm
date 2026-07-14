@@ -12,7 +12,8 @@ rank_job_status(project)
 \value{
 A list with \code{status} (\code{"starting"}, \code{"running"}, \code{"done"}, or
 \code{"error"}), \code{processed}, \code{total}, \code{percent}, \code{current_model},
-\code{eta_secs}, and optionally \code{error} and \code{elapsed_secs}.
+\code{eta_secs}, \code{scores} (a per-call data.frame of everything scored
+so far), and optionally \code{error} and \code{elapsed_secs}.
 }
 \description{
 Non-blocking: reads the progress file the worker updates.

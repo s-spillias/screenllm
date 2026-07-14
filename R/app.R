@@ -31,11 +31,10 @@ app_ui <- function() {
     bslib::nav_panel("1. Setup", mod_setup_ui("setup")),
     bslib::nav_panel("2. Corpus", mod_corpus_ui("corpus")),
     bslib::nav_panel("3. Criteria", mod_criteria_ui("criteria")),
-    bslib::nav_panel("4. Pilot", mod_pilot_ui("pilot")),
-    bslib::nav_panel("5. Rank", mod_rank_ui("rank")),
-    bslib::nav_panel("6. Plan", mod_plan_ui("plan")),
-    bslib::nav_panel("7. Screen", mod_screen_ui("screen")),
-    bslib::nav_panel("8. Report", mod_report_ui("report")),
+    bslib::nav_panel("4. Rank", mod_rank_ui("rank")),
+    bslib::nav_panel("5. Plan", mod_plan_ui("plan")),
+    bslib::nav_panel("6. Screen", mod_screen_ui("screen")),
+    bslib::nav_panel("7. Report", mod_report_ui("report")),
     bslib::nav_spacer(),
     bslib::nav_item(
       shiny::textOutput("project_badge", inline = TRUE)
@@ -54,7 +53,6 @@ app_server <- function(input, output, session, initial_project = NULL) {
     ranked = NULL,
     plan = NULL,
     decisions = NULL,
-    pilot = NULL,
     rank_handle = NULL
   )
 
@@ -70,7 +68,6 @@ app_server <- function(input, output, session, initial_project = NULL) {
   mod_setup_server("setup", state = state)
   mod_corpus_server("corpus", state = state)
   mod_criteria_server("criteria", state = state)
-  mod_pilot_server("pilot", state = state)
   mod_rank_server("rank", state = state)
   mod_plan_server("plan", state = state)
   mod_screen_server("screen", state = state)

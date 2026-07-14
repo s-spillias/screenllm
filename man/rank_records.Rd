@@ -10,7 +10,8 @@ rank_records(
   ensemble = default_ensemble(),
   cache_dir = getOption("screenllm.cache_dir"),
   verbose = getOption("screenllm.verbose", TRUE),
-  max_workers = getOption("screenllm.max_workers", 1L)
+  max_workers = getOption("screenllm.max_workers", 1L),
+  on_score = NULL
 )
 }
 \arguments{
@@ -28,6 +29,12 @@ R sessions.}
 \item{verbose}{Show progress messages and bars.}
 
 \item{max_workers}{Not yet used; reserved for future concurrency.}
+
+\item{on_score}{Optional callback invoked once per (record, model,
+replicate) tuple after each score is available (whether fresh or
+restored from cache). Signature:
+\verb{function(id, model, replicate, score, explanation, error, index, total)}. Used by the Shiny app's ranking module to stream
+partial scores into the UI as they land; safe to leave \code{NULL}.}
 }
 \value{
 The input tibble with added columns:

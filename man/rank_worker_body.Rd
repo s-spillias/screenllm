@@ -4,7 +4,14 @@
 \alias{rank_worker_body}
 \title{Function executed inside the background R process}
 \usage{
-rank_worker_body(project, cache_dir, progress_path, ranked_path, libpaths)
+rank_worker_body(
+  records_path,
+  project,
+  cache_dir,
+  progress_path,
+  ranked_path,
+  libpaths
+)
 }
 \description{
 Kept as a standalone top-level function so \code{callr::r_bg} can serialise

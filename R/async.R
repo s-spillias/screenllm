@@ -3,24 +3,13 @@
 # `rank_records()` is long-running (hours on a real corpus), and Shiny's
 # default execution model would freeze the UI for the whole run. We wrap
 # it in a background R process so the Shiny app can call `start_rank_job()`,
-# return immediately, and poll `rank_job_status()` to update a progress bar.
+# return immediately, and poll `rank_job_status()` to update a progress bar
+# and stream per-record scores as they land.
 #
 # We deliberately avoid `future`/`promises` here because they can hit
 # thorny issues around global capture and library reload inside Shiny.
 # Instead we use `callr::r_bg`, which spawns a plain R subprocess whose
 # stderr we can tail, and a small progress file the subprocess writes to.
-#
-# The design:
-#   - The parent Shiny process calls `start_rank_job(project, ...)`.
-#   - `start_rank_job()` spawns a callr::r_bg() worker that:
-#       - loads screenllm
-#       - reads the project's records + criteria + ensemble
-#       - runs rank_records() with a small `on_progress` callback that
-#         writes a "processed / total" line to the project's progress file
-#       - saves the ranked result and terminates
-#   - The Shiny process periodically calls `rank_job_status(project)` to
-#     read that progress file and update its UI.
-#   - `rank_job_cancel(project)` kills the worker.
 
 #' Start a background ranking job for a project
 #'
@@ -28,13 +17,28 @@
 #' criteria, and ensemble from disk and runs `rank_records()`. Returns
 #' immediately with a handle the caller can poll or cancel.
 #'
+#' Optionally sub-samples the records so the worker only ranks `n`
+#' of them. This is the mechanism the Shiny app uses for "quick pilot"
+#' runs against a real Ollama backend: same code path as a full rank,
+#' just fewer records.
+#'
 #' @param project Project name.
 #' @param ensemble A `screenllm_ensemble` object. Saved into the project
 #'   directory so the worker can read it.
+#' @param sample_size Optional integer. If supplied and less than the
+#'   number of records, the worker samples `sample_size` records
+#'   before ranking. `NULL` (default) or `0` = all records.
+#' @param random_sample If sampling, whether to draw at random
+#'   (default `TRUE`) or take the first `sample_size` rows.
+#' @param seed Random seed used when `random_sample = TRUE`.
 #' @return A list with `pid` (the worker PID) and `handle` (the callr
 #'   process object).
 #' @export
-start_rank_job <- function(project, ensemble = default_ensemble()) {
+start_rank_job <- function(project,
+                           ensemble = default_ensemble(),
+                           sample_size = NULL,
+                           random_sample = TRUE,
+                           seed = 1L) {
   rlang::check_installed("callr", "to run ranking in the background.")
 
   records <- load_artefact(project, "records")
@@ -47,17 +51,42 @@ start_rank_job <- function(project, ensemble = default_ensemble()) {
   }
   save_artefact(project, "ensemble", ensemble)
 
+  # Resolve the effective sample. NULL / 0 / >= nrow means all.
+  n_target <- if (is.null(sample_size) || is.na(sample_size) ||
+                    as.integer(sample_size) <= 0L) {
+    nrow(records)
+  } else {
+    min(as.integer(sample_size), nrow(records))
+  }
+  if (n_target < nrow(records)) {
+    if (isTRUE(random_sample)) {
+      set.seed(seed)
+      records <- records[sort(sample.int(nrow(records), n_target)), , drop = FALSE]
+    } else {
+      records <- records[seq_len(n_target), , drop = FALSE]
+    }
+  }
+
+  # Persist the (possibly subsampled) records the worker will use.
+  # Written to a per-job side file so we don't clobber the project's
+  # canonical records artefact.
+  proj_dir <- project_dir(project, create = TRUE)
+  worker_records_path <- fs::path(proj_dir, "rank_job_records.rds")
+  saveRDS(records, worker_records_path)
+
   # Initialise the progress file so pollers get a defined state even
   # before the worker writes its first update.
   save_artefact(project, "progress", list(
     status = "starting",
     processed = 0L,
     total = nrow(records) * length(ensemble$models) * ensemble$replicates,
+    n_records = nrow(records),
     started_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
-    error = NULL
+    error = NULL,
+    current_model = NA_character_,
+    scores = list()
   ))
 
-  proj_dir <- project_dir(project, create = TRUE)
   cache_dir <- project_cache_dir(project)
   progress_path <- fs::path(proj_dir, .project_artefacts$progress)
   ranked_path <- fs::path(proj_dir, .project_artefacts$ranked)
@@ -66,6 +95,7 @@ start_rank_job <- function(project, ensemble = default_ensemble()) {
   handle <- callr::r_bg(
     func = rank_worker_body,
     args = list(
+      records_path = worker_records_path,
       project = project,
       cache_dir = cache_dir,
       progress_path = progress_path,
@@ -87,14 +117,15 @@ start_rank_job <- function(project, ensemble = default_ensemble()) {
 #' @param project Project name.
 #' @return A list with `status` (`"starting"`, `"running"`, `"done"`, or
 #'   `"error"`), `processed`, `total`, `percent`, `current_model`,
-#'   `eta_secs`, and optionally `error` and `elapsed_secs`.
+#'   `eta_secs`, `scores` (a per-call data.frame of everything scored
+#'   so far), and optionally `error` and `elapsed_secs`.
 #' @export
 rank_job_status <- function(project) {
   st <- load_artefact(project, "progress")
   if (is.null(st)) {
     return(list(status = "idle", processed = 0L, total = NA_integer_,
                 percent = 0, current_model = NA_character_,
-                eta_secs = NA_real_))
+                eta_secs = NA_real_, scores = list()))
   }
   pct <- if (isTRUE(st$total > 0)) round(100 * st$processed / st$total, 1) else 0
   elapsed <- if (!is.null(st$started_at)) {
@@ -104,8 +135,6 @@ rank_job_status <- function(project) {
     } else NA_real_
   } else NA_real_
   # ETA = remaining_calls / rate_calls_per_sec.
-  # Only report once we have >= a few seconds of data so the estimate
-  # doesn't flicker wildly at start-up.
   eta_secs <- NA_real_
   if (!is.na(elapsed) && elapsed > 5 &&
         !is.null(st$processed) && st$processed > 0 &&
@@ -137,11 +166,12 @@ rank_job_cancel <- function(handle) {
 #' its body without capturing an environment.
 #'
 #' @keywords internal
-rank_worker_body <- function(project, cache_dir, progress_path, ranked_path, libpaths) {
+rank_worker_body <- function(records_path, project, cache_dir, progress_path,
+                             ranked_path, libpaths) {
   .libPaths(libpaths)
   library(screenllm)
 
-  records  <- load_artefact(project, "records")
+  records  <- readRDS(records_path)
   criteria <- load_artefact(project, "criteria")
   ensemble <- load_artefact(project, "ensemble")
 
@@ -153,62 +183,91 @@ rank_worker_body <- function(project, cache_dir, progress_path, ranked_path, lib
   # Fixed timestamp so ETA is measured from the actual job start,
   # not from each throttled progress write.
   started_at <- format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z")
-  saveRDS(list(
-    status = "running", processed = 0L, total = total,
-    started_at = started_at, error = NULL,
-    current_model = NA_character_
-  ), progress_path)
 
-  # Wrap the ensemble backend so we can count completed scoring calls
-  # without editing rank_records() itself.
-  progress_counter <- new.env(parent = emptyenv())
-  progress_counter$n <- 0L
-  progress_counter$last_write <- Sys.time()
+  # Streaming state. `scores` accumulates every per-call result as
+  # rank_records() completes each (model, replicate, record) tuple.
+  # We throttle progress-file writes to ~4/sec so a 4000-call run
+  # doesn't hammer the disk.
+  ctx <- new.env(parent = emptyenv())
+  ctx$processed <- 0L
+  ctx$current_model <- NA_character_
+  ctx$scores_id <- character()
+  ctx$scores_model <- character()
+  ctx$scores_replicate <- integer()
+  ctx$scores_score <- numeric()
+  ctx$scores_explanation <- character()
+  ctx$last_write <- Sys.time() - 1
 
-  original_score <- ensemble$backend$score_record
-  wrapped <- ensemble
-  wrapped$backend$score_record <- function(model, prompt, temperature) {
-    out <- original_score(model, prompt, temperature)
-    progress_counter$n <- progress_counter$n + 1L
+  # Save the record metadata the UI needs to display partial results
+  # (title, abstract) alongside per-call scores. Keep it small: only
+  # the columns we actually use.
+  record_meta <- tibble::tibble(
+    id = as.character(records$id),
+    title = as.character(records$title),
+    abstract = if ("abstract" %in% names(records))
+      as.character(records$abstract) else NA_character_
+  )
+
+  write_state <- function(status = "running", error = NULL, force = FALSE) {
     now <- Sys.time()
-    # Throttle writes to at most 4/second to avoid disk thrash.
-    if (as.numeric(now - progress_counter$last_write, units = "secs") > 0.25) {
-      saveRDS(list(
-        status = "running",
-        processed = progress_counter$n,
-        total = total,
-        current_model = model,
-        started_at = started_at,
-        error = NULL
-      ), progress_path)
-      progress_counter$last_write <- now
+    if (!force &&
+          as.numeric(now - ctx$last_write, units = "secs") < 0.25) {
+      return(invisible())
     }
-    out
+    scores_df <- data.frame(
+      id = ctx$scores_id,
+      model = ctx$scores_model,
+      replicate = ctx$scores_replicate,
+      score = ctx$scores_score,
+      explanation = ctx$scores_explanation,
+      stringsAsFactors = FALSE
+    )
+    saveRDS(list(
+      status = status,
+      processed = ctx$processed,
+      total = total,
+      n_records = n_records,
+      current_model = ctx$current_model,
+      started_at = started_at,
+      error = error,
+      scores = scores_df,
+      record_meta = record_meta,
+      ensemble_models = ensemble$models,
+      ensemble_replicates = replicates,
+      aggregator = ensemble$aggregator
+    ), progress_path)
+    ctx$last_write <- now
+  }
+
+  # Initial "running" state.
+  write_state(force = TRUE)
+
+  on_score_cb <- function(id, model, replicate, score, explanation, error,
+                          index, total) {
+    ctx$processed <- as.integer(index)
+    ctx$current_model <- as.character(model)
+    ctx$scores_id <- c(ctx$scores_id, as.character(id))
+    ctx$scores_model <- c(ctx$scores_model, as.character(model))
+    ctx$scores_replicate <- c(ctx$scores_replicate, as.integer(replicate))
+    ctx$scores_score <- c(ctx$scores_score, as.numeric(score))
+    ctx$scores_explanation <- c(ctx$scores_explanation,
+                                 as.character(explanation))
+    write_state()
   }
 
   ranked <- tryCatch(
     rank_records(
-      records = records, criteria = criteria, ensemble = wrapped,
-      cache_dir = cache_dir, verbose = FALSE
+      records = records, criteria = criteria, ensemble = ensemble,
+      cache_dir = cache_dir, verbose = FALSE,
+      on_score = on_score_cb
     ),
     error = function(e) {
-      saveRDS(list(
-        status = "error",
-        processed = progress_counter$n,
-        total = total,
-        current_model = NA_character_,
-        started_at = started_at,
-        error = conditionMessage(e)
-      ), progress_path)
+      write_state(status = "error", error = conditionMessage(e), force = TRUE)
       stop(e)
     }
   )
 
   saveRDS(ranked, ranked_path)
-  saveRDS(list(
-    status = "done", processed = total, total = total,
-    current_model = NA_character_,
-    started_at = started_at, error = NULL
-  ), progress_path)
+  write_state(status = "done", force = TRUE)
   invisible(TRUE)
 }

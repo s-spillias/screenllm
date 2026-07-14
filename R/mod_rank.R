@@ -1,7 +1,10 @@
-# Rank tab: start async ranking job, poll progress, review outputs.
+# Rank tab: start async ranking (full corpus or a sample), poll
+# progress, and stream partial per-model results into a live table.
+# The old dedicated Pilot tab is folded in here: a small "Sample size"
+# input lets the user run against a subset, which is what a pilot
+# fundamentally was.
 
-# Format seconds as HH:MM:SS (or MM:SS if under an hour). Small utility
-# used by the status line; kept local to this module.
+# Format seconds as HH:MM:SS (or MM:SS if under an hour).
 fmt_hms <- function(secs) {
   if (is.na(secs) || !is.finite(secs) || secs < 0) return("-")
   h <- floor(secs / 3600)
@@ -15,22 +18,44 @@ fmt_hms <- function(secs) {
 mod_rank_ui <- function(id) {
   ns <- shiny::NS(id)
   bslib::layout_columns(
-    col_widths = c(5, 7),
+    col_widths = c(4, 8),
     bslib::card(
       bslib::card_header("Ranking job"),
       shiny::uiOutput(ns("readiness")),
       shiny::uiOutput(ns("estimate_banner")),
-      shiny::actionButton(ns("start"), "Start ranking",
-                          class = "btn-primary"),
-      shiny::actionButton(ns("cancel"), "Cancel",
-                          class = "btn-outline-danger"),
+      shiny::numericInput(
+        ns("sample_size"),
+        "Records to score (0 = all)",
+        value = 0L, min = 0L, max = 100000L, step = 5L
+      ),
+      shiny::conditionalPanel(
+        # Only offer the random-sample toggle when a partial run is
+        # actually happening. If the user leaves sample_size = 0
+        # (full corpus), the toggle is meaningless.
+        condition = sprintf("input['%s'] > 0", ns("sample_size")),
+        shiny::checkboxInput(ns("random_sample"),
+                              "Random sample (uncheck for first N in file order)",
+                              value = TRUE)
+      ),
+      shiny::fluidRow(
+        shiny::column(6, shiny::actionButton(ns("start"), "Start ranking",
+                                              class = "btn-primary w-100")),
+        shiny::column(6, shiny::actionButton(ns("cancel"), "Cancel",
+                                              class = "btn-outline-danger w-100"))
+      ),
       shiny::hr(),
       shiny::textOutput(ns("status_line")),
-      shiny::plotOutput(ns("progress_plot"), height = "40px")
+      shiny::uiOutput(ns("model_progress"))
     ),
     bslib::card(
-      bslib::card_header("Ranked corpus (top 25)"),
-      DT::DTOutput(ns("ranked_table"))
+      bslib::card_header("Ensemble scores (live)"),
+      DT::DTOutput(ns("scores_table")),
+      shiny::tags$hr(),
+      shiny::tags$small(
+        class = "text-muted",
+        "Click a row above to see each model's justification for that record."
+      ),
+      shiny::uiOutput(ns("details"))
     )
   )
 }
@@ -38,19 +63,6 @@ mod_rank_ui <- function(id) {
 #' @keywords internal
 mod_rank_server <- function(id, state) {
   shiny::moduleServer(id, function(input, output, session) {
-    output$estimate_banner <- shiny::renderUI({
-      if (is.null(state$records) || is.null(state$ensemble)) return(NULL)
-      est <- estimate_runtime(nrow(state$records), state$ensemble)
-      shiny::tags$div(
-        class = "alert alert-info py-1 my-1",
-        shiny::tags$small(
-          shiny::tags$strong("Estimated runtime: "),
-          est$human_readable,
-          sprintf(" (%s LLM calls at ~%.0fs each). Rough heuristic; GPUs run several times faster.",
-                  format(est$n_calls, big.mark = ","), est$seconds_per_call)
-        )
-      )
-    })
 
     output$readiness <- shiny::renderUI({
       needs <- c(
@@ -64,17 +76,42 @@ mod_rank_server <- function(id, state) {
                          "All inputs ready. Click Start ranking.")
       } else {
         shiny::tags$div(
-          shiny::tags$span(class = "badge bg-warning",
-                           "Missing:"),
+          shiny::tags$span(class = "badge bg-warning", "Missing:"),
           shiny::tags$ul(lapply(needs, shiny::tags$li))
         )
       }
     })
 
+    output$estimate_banner <- shiny::renderUI({
+      if (is.null(state$records) || is.null(state$ensemble)) return(NULL)
+      n_full <- nrow(state$records)
+      n_target <- if (isTRUE(as.integer(input$sample_size) > 0L)) {
+        min(as.integer(input$sample_size), n_full)
+      } else n_full
+      est <- estimate_runtime(n_target, state$ensemble)
+      shiny::tags$div(
+        class = "alert alert-info py-1 my-1",
+        shiny::tags$small(
+          shiny::tags$strong("Estimated runtime: "),
+          est$human_readable,
+          sprintf(" (%s LLM calls at ~%.0fs each). Rough heuristic; GPUs run several times faster.",
+                  format(est$n_calls, big.mark = ","), est$seconds_per_call)
+        )
+      )
+    })
+
+    # Same completion-toast bookkeeping as before, keyed by project.
+    rank_notified <- shiny::reactiveVal(character())
+
     shiny::observeEvent(input$start, {
       shiny::req(state$project, state$records, state$criteria, state$ensemble)
       handle <- try(
-        start_rank_job(state$project, ensemble = state$ensemble),
+        start_rank_job(
+          state$project,
+          ensemble = state$ensemble,
+          sample_size = as.integer(input$sample_size),
+          random_sample = isTRUE(input$random_sample)
+        ),
         silent = TRUE
       )
       if (inherits(handle, "try-error")) {
@@ -82,6 +119,12 @@ mod_rank_server <- function(id, state) {
         return(NULL)
       }
       state$rank_handle <- handle$handle
+      # Reset the notification tracking for this project so a re-run
+      # can fire its own completion toast.
+      rank_notified(setdiff(rank_notified(), state$project))
+      # Fresh state$ranked so the streaming table starts empty (the
+      # prior run's rankings would confuse the display).
+      state$ranked <- NULL
       shiny::showNotification("Ranking job started in background.", duration = 4)
     })
 
@@ -93,32 +136,27 @@ mod_rank_server <- function(id, state) {
       }
     })
 
-    # Set of projects we've already emitted a completion notification
-    # for, so the poll doesn't keep firing a Notification after done.
-    rank_notified <- shiny::reactiveVal(character())
-
-    # Poll the progress file every 500 ms while a job is running.
+    # Poll the progress file every 500 ms while a job is running, and
+    # keep polling briefly after completion so the completion toast
+    # + final-scores render actually get a chance to fire.
     poll <- shiny::reactivePoll(
       intervalMillis = 500,
       session = session,
       checkFunc = function() {
         if (is.null(state$project)) return(0)
         file.info(fs::path(project_dir(state$project, create = FALSE),
-                            list_project_artefacts()["progress"]))$mtime
+                            .project_artefacts$progress))$mtime
       },
       valueFunc = function() {
         if (is.null(state$project)) return(NULL)
         st <- rank_job_status(state$project)
-        # If the job just finished, load the ranked object and notify
-        # the user once (only).
+        # Load the final ranked artefact once the worker signals done.
         if (identical(st$status, "done") && is.null(state$ranked)) {
           state$ranked <- load_artefact(state$project, "ranked")
         }
         proj <- state$project
+        # One-shot completion toast, warning if fail-rate is high.
         if (identical(st$status, "done") && !(proj %in% rank_notified())) {
-          # Detect the all-NA case (every LLM call failed but the
-          # worker "succeeded"). This happens when models aren't
-          # installed or the daemon dies mid-run.
           r <- state$ranked
           fail_rate <- if (!is.null(r) && "universal_best_score" %in% names(r) &&
                              nrow(r) > 0) {
@@ -174,26 +212,208 @@ mod_rank_server <- function(id, state) {
               elapsed, eta, model, err)
     })
 
-    output$progress_plot <- shiny::renderPlot({
+    # A tiny per-model progress bar so the user can see model-major
+    # ordering in action: model A ticks through all N records first,
+    # then model B, and so on.
+    output$model_progress <- shiny::renderUI({
       st <- poll()
-      pct <- if (!is.null(st$percent)) st$percent else 0
-      par(mar = c(0, 0, 0, 0))
-      plot.new()
-      rect(0, 0.3, 1, 0.7, col = "grey85", border = NA)
-      rect(0, 0.3, pct / 100, 0.7,
-           col = if (identical(st$status, "error")) "firebrick" else "steelblue",
-           border = NA)
+      if (is.null(st) || is.null(st$ensemble_models) ||
+            length(st$ensemble_models) == 0L) {
+        return(NULL)
+      }
+      models <- st$ensemble_models
+      per_model_target <- st$n_records * (st$ensemble_replicates %||% 1L)
+      # Count how many calls each model has completed.
+      scores <- st$scores %||% data.frame(model = character())
+      done_by_model <- if (nrow(scores) > 0L) {
+        table(factor(scores$model, levels = models))
+      } else stats::setNames(integer(length(models)), models)
+      bars <- lapply(models, function(m) {
+        n_done <- as.integer(done_by_model[m] %||% 0L)
+        pct <- if (per_model_target > 0L) round(100 * n_done / per_model_target) else 0
+        colour <- if (pct >= 100) "success" else "info"
+        shiny::tags$div(
+          class = "mb-1",
+          shiny::tags$div(
+            class = "d-flex justify-content-between",
+            shiny::tags$small(class = "text-nowrap font-monospace", m),
+            shiny::tags$small(class = "text-muted",
+                              sprintf("%d/%d (%d%%)", n_done, per_model_target, pct))
+          ),
+          shiny::tags$div(
+            class = "progress", style = "height: 4px;",
+            shiny::tags$div(
+              class = sprintf("progress-bar bg-%s", colour),
+              role = "progressbar",
+              style = sprintf("width: %d%%;", pct)
+            )
+          )
+        )
+      })
+      shiny::tags$div(class = "mt-2", bars)
     })
 
-    output$ranked_table <- DT::renderDT({
-      r <- state$ranked
-      if (is.null(r)) return(NULL)
-      cols <- intersect(c("id", "rank", "universal_best_score", "title"), names(r))
-      DT::datatable(
-        r[seq_len(min(25L, nrow(r))), cols, drop = FALSE],
-        options = list(pageLength = 10),
-        rownames = FALSE
+    # ------ Live scores table ------
+
+    # Build the streaming per-record view from the polled per-call
+    # scores. Aggregates provisionally (mean of scored replicates so
+    # far); once every model x replicate has landed for a record the
+    # score matches the final ranked artefact.
+    partial <- shiny::reactive({
+      # Prefer the persisted ranked artefact when it's already there
+      # (a completed prior run) - it's a full tibble with justifications
+      # attached, which is what the details panel needs.
+      if (!is.null(state$ranked) && nrow(state$ranked) > 0L) {
+        return(list(
+          scores = state$ranked,
+          n_reps = attr(state$ranked, "ensemble")$replicates %||% 1L,
+          models = attr(state$ranked, "ensemble")$models %||% character(),
+          source = "artefact"
+        ))
+      }
+      st <- poll()
+      if (is.null(st) || is.null(st$scores) || nrow(st$scores) == 0L) {
+        return(NULL)
+      }
+      # Aggregate provisional scores per record.
+      long <- st$scores
+      long <- long[!is.na(long$score), , drop = FALSE]
+      if (nrow(long) == 0L) return(NULL)
+      agg <- do.call(rbind, lapply(split(long, long$id), function(sub) {
+        data.frame(
+          id = sub$id[1L],
+          universal_best_score = mean(sub$score, na.rm = TRUE),
+          n_scored = nrow(sub),
+          stringsAsFactors = FALSE
+        )
+      }))
+      # Attach titles and abstracts from record_meta.
+      meta <- st$record_meta
+      out <- if (!is.null(meta)) {
+        merge(meta, agg, by = "id", all.y = TRUE)
+      } else {
+        agg$title <- NA_character_
+        agg$abstract <- NA_character_
+        agg
+      }
+      # Attach the per-model score list-column so the details panel
+      # can still work off partial state.
+      per_model <- split(long, long$id)
+      pms <- lapply(rownames(out), function(i) {
+        entry <- per_model[[out$id[as.integer(i)]]]
+        data.frame(
+          model = entry$model, replicate = entry$replicate,
+          score = entry$score,
+          stringsAsFactors = FALSE
+        )
+      })
+      jus <- lapply(rownames(out), function(i) {
+        entry <- per_model[[out$id[as.integer(i)]]]
+        data.frame(
+          model = entry$model, replicate = entry$replicate,
+          explanation = entry$explanation,
+          stringsAsFactors = FALSE
+        )
+      })
+      out$per_model_scores <- pms
+      out$justifications <- jus
+      list(
+        scores = out,
+        n_reps = st$ensemble_replicates %||% 1L,
+        models = st$ensemble_models %||% character(),
+        source = "partial"
       )
+    })
+
+    # ---- Selection persistence across streaming re-renders ----
+    selected_id <- shiny::reactiveVal(NULL)
+    shiny::observeEvent(input$scores_table_rows_selected,
+                        ignoreNULL = FALSE, {
+      sel <- input$scores_table_rows_selected
+      if (length(sel) == 0L) return()
+      p <- shiny::isolate(partial())
+      if (is.null(p) || nrow(p$scores) == 0L) return()
+      sc <- p$scores[order(-p$scores$universal_best_score), , drop = FALSE]
+      if (sel[1L] >= 1L && sel[1L] <= nrow(sc)) {
+        selected_id(as.character(sc$id[sel[1L]]))
+      }
+    })
+
+    output$scores_table <- DT::renderDT({
+      p <- partial()
+      if (is.null(p) || nrow(p$scores) == 0L) return(NULL)
+      sc <- p$scores[order(-p$scores$universal_best_score), , drop = FALSE]
+      target_scores <- max(1L, length(p$models) * as.integer(p$n_reps))
+      # Truncate title for the table; full text is in the details panel.
+      short_title <- if ("title" %in% names(sc)) {
+        substr(sc$title, 1, 100)
+      } else rep("", nrow(sc))
+      # Show provisional status via n/target when partial.
+      progress_col <- if ("n_scored" %in% names(sc)) {
+        sprintf("%d/%d", sc$n_scored, target_scores)
+      } else rep(sprintf("%d/%d", target_scores, target_scores), nrow(sc))
+      tbl <- data.frame(
+        rank = seq_len(nrow(sc)),
+        id = sc$id,
+        score = round(sc$universal_best_score),
+        scored = progress_col,
+        title = short_title,
+        stringsAsFactors = FALSE
+      )
+      sid <- shiny::isolate(selected_id())
+      preselect <- if (!is.null(sid)) which(sc$id == sid) else integer(0)
+      DT::datatable(
+        tbl,
+        options = list(pageLength = 15, autoWidth = FALSE, scrollX = TRUE),
+        rownames = FALSE,
+        selection = list(mode = "single", selected = preselect),
+        class = "compact"
+      )
+    })
+
+    output$details <- shiny::renderUI({
+      p <- partial()
+      sid <- selected_id()
+      if (is.null(p) || nrow(p$scores) == 0L || is.null(sid)) {
+        return(shiny::tags$p(class = "text-muted fst-italic small mt-2",
+                             "No row selected."))
+      }
+      sc <- p$scores
+      idx <- which(sc$id == sid)
+      if (length(idx) == 0L) {
+        return(shiny::tags$p(class = "text-muted fst-italic small mt-2",
+                             "(record not found)"))
+      }
+      rec <- sc[idx[1L], ]
+      js <- rec$justifications[[1L]]
+      if (is.null(js) || nrow(js) == 0L) {
+        return(shiny::tags$p(class = "text-muted fst-italic small mt-2",
+                             "(no justifications yet)"))
+      }
+      header <- shiny::tags$div(
+        class = "mb-2",
+        shiny::tags$span(class = "badge bg-primary me-2",
+                         sprintf("score %.0f", rec$universal_best_score)),
+        shiny::tags$span(class = "fw-semibold",
+                         substr(rec$title %||% "", 1, 200))
+      )
+      panels <- lapply(seq_len(nrow(js)), function(i) {
+        explanation <- js$explanation[i] %||% ""
+        explanation <- gsub("\\s+", " ", explanation)
+        shiny::tags$div(
+          class = "border rounded p-2 mb-2 bg-body-tertiary",
+          shiny::tags$div(
+            class = "d-flex justify-content-between align-items-baseline mb-1",
+            shiny::tags$code(class = "small", js$model[i]),
+            shiny::tags$span(class = "small text-muted",
+                             sprintf("replicate %d", js$replicate[i]))
+          ),
+          shiny::tags$p(class = "mb-0 small text-break text-wrap",
+                        if (nzchar(explanation)) explanation
+                        else shiny::tags$em("(no explanation returned by the model)"))
+        )
+      })
+      shiny::tagList(header, panels)
     })
   })
 }

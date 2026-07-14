@@ -15,6 +15,12 @@
 #'   R sessions.
 #' @param verbose Show progress messages and bars.
 #' @param max_workers Not yet used; reserved for future concurrency.
+#' @param on_score Optional callback invoked once per (record, model,
+#'   replicate) tuple after each score is available (whether fresh or
+#'   restored from cache). Signature:
+#'   `function(id, model, replicate, score, explanation, error,
+#'   index, total)`. Used by the Shiny app's ranking module to stream
+#'   partial scores into the UI as they land; safe to leave `NULL`.
 #' @return The input tibble with added columns:
 #'   `universal_best_score`, `rank`, `per_model_scores` (list-column),
 #'   `justifications` (list-column of per-criterion rationales as returned
@@ -43,7 +49,8 @@ rank_records <- function(records,
                          ensemble = default_ensemble(),
                          cache_dir = getOption("screenllm.cache_dir"),
                          verbose = getOption("screenllm.verbose", TRUE),
-                         max_workers = getOption("screenllm.max_workers", 1L)) {
+                         max_workers = getOption("screenllm.max_workers", 1L),
+                         on_score = NULL) {
   stopifnot(
     is.data.frame(records),
     inherits(criteria, "screenllm_criteria"),
@@ -118,6 +125,23 @@ rank_records <- function(records,
     }
     scores[[i]] <- out
     if (!is.null(pb)) cli::cli_progress_update(id = pb)
+    if (!is.null(on_score)) {
+      tryCatch(
+        on_score(
+          id = row$id, model = row$model, replicate = row$replicate,
+          score = as.numeric(out$score %||% NA_real_),
+          explanation = out$explanation %||% NA_character_,
+          error = out$error %||% NA_character_,
+          index = i, total = nrow(jobs)
+        ),
+        error = function(e) {
+          # A broken callback should not abort the ranking run.
+          if (verbose) cli::cli_alert_warning(
+            "on_score callback failed: {conditionMessage(e)}"
+          )
+        }
+      )
+    }
   }
   if (!is.null(pb)) cli::cli_progress_done(id = pb)
 
