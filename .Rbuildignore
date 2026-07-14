@@ -2,6 +2,7 @@
 ^\.gitignore$
 ^\.github$
 ^_pkgdown\.yml$
+^screenllm_install\.txt$
 ^docs$
 ^pkgdown$
 ^\.github/ISSUE_TEMPLATE$

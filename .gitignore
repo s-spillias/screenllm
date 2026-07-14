@@ -29,3 +29,6 @@ Meta/
 # Local devel scratch
 dev/
 scratch/
+
+# Local paste-snippet file that may contain a live GitHub PAT
+screenllm_install.txt
