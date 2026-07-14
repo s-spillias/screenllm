@@ -8,6 +8,7 @@ mod_rank_ui <- function(id) {
     bslib::card(
       bslib::card_header("Ranking job"),
       shiny::uiOutput(ns("readiness")),
+      shiny::uiOutput(ns("estimate_banner")),
       shiny::actionButton(ns("start"), "Start ranking",
                           class = "btn-primary"),
       shiny::actionButton(ns("cancel"), "Cancel",
@@ -26,6 +27,20 @@ mod_rank_ui <- function(id) {
 #' @keywords internal
 mod_rank_server <- function(id, state) {
   shiny::moduleServer(id, function(input, output, session) {
+    output$estimate_banner <- shiny::renderUI({
+      if (is.null(state$records) || is.null(state$ensemble)) return(NULL)
+      est <- estimate_runtime(nrow(state$records), state$ensemble)
+      shiny::tags$div(
+        class = "alert alert-info py-1 my-1",
+        shiny::tags$small(
+          shiny::tags$strong("Estimated runtime: "),
+          est$human_readable,
+          sprintf(" (%s LLM calls at ~%.0fs each). Rough heuristic; GPUs run several times faster.",
+                  format(est$n_calls, big.mark = ","), est$seconds_per_call)
+        )
+      )
+    })
+
     output$readiness <- shiny::renderUI({
       needs <- c(
         if (is.null(state$project)) "a project" else NULL,

@@ -8,10 +8,12 @@ Description: A turn-key workflow for LLM-assisted systematic-review screening.
     open-source large language models served locally by Ollama, then applies
     the SAFE stopping rule to identify the records a human should screen.
     Defaults match the four-LLM mean ensemble and the advance-choosable
-    SAFE configuration recommended by Spillias et al. (2026). Custom
-    ensembles, alternative backends (OpenAI, Anthropic), and per-review
-    criteria clarifications are supported. A companion Shiny app walks
-    the human reviewer through the records above the stopping point.
+    SAFE configuration recommended by Spillias et al. (2026). A companion
+    Shiny app walks the human reviewer through the records above the
+    stopping point. Complementary to the 'AIscreenR' package (Vembye et
+    al. 2025, <doi:10.1037/met0000769>), which targets cloud-hosted GPT
+    models via the OpenAI API; 'screenllm' targets locally-served
+    open-weights ensembles with an integrated stopping rule.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
@@ -39,7 +41,8 @@ Suggests:
     rmarkdown,
     readr,
     withr,
-    mockery
+    mockery,
+    stringdist
 Config/testthat/edition: 3
 VignetteBuilder: knitr
 URL: https://github.com/s-spillias/screenllm

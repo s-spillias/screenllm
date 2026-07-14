@@ -121,6 +121,24 @@ Following the paper's own scoping:
 revision. API surface is small (six calls in the manual path, one call
 via the Shiny app) and stable; internals may change.
 
+## Related packages
+
+`screenllm` targets locally-served open-weights ensembles with an
+integrated stopping rule. If your use case is different, you may want:
+
+- **[AIscreenR](https://cran.r-project.org/package=AIscreenR)** — cloud-hosted
+  OpenAI GPT models, single-model screening, quality-assessment tooling.
+  Recommended if you have an OpenAI API key and no data-privacy constraint
+  ([Vembye et al. 2025, *Psychol. Methods*](https://doi.org/10.1037/met0000769)).
+- **[revtools](https://cran.r-project.org/package=revtools)** — deduplication
+  and interactive text-mining visualisations of the corpus (no
+  classification).
+- **[metagear](https://cran.r-project.org/package=metagear)** — GUI for
+  fully-manual human screening; also handles PRISMA diagrams.
+- **[ollamar](https://cran.r-project.org/package=ollamar)** /
+  **[rollama](https://cran.r-project.org/package=rollama)** — generic
+  Ollama HTTP wrappers (no screening-specific tooling).
+
 ## Cite
 
 If you use `screenllm` in a review, please cite:

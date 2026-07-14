@@ -59,16 +59,167 @@ read_records_from_path <- function(path) {
       rlang::check_installed("readxl", "to read Excel files.")
       tibble::as_tibble(readxl::read_excel(path))
     },
-    ris = {
-      rlang::check_installed("bibtex", "to read RIS/BibTeX files.")
-      cli::cli_abort("RIS ingest not yet implemented in v0.1; supply CSV/XLSX for now.")
-    },
+    ris = read_ris_records(path),
+    txt = read_ris_records(path),  # some exporters name RIS as .txt
     bib = {
-      rlang::check_installed("bibtex", "to read RIS/BibTeX files.")
-      cli::cli_abort("BibTeX ingest not yet implemented in v0.1; supply CSV/XLSX for now.")
+      cli::cli_abort(
+        "BibTeX ingest is not supported. Convert to CSV or RIS first."
+      )
     },
     cli::cli_abort("Unsupported file extension: {.val {ext}}")
   )
+}
+
+# Minimal RIS parser. Handles the tags Zotero, EndNote, Web of Science,
+# and Mendeley all emit: TI (title), T1 (title alt), AB (abstract),
+# N2 (abstract alt), DO (DOI), PY / Y1 (year), JO / T2 / JF (journal),
+# AU (authors), UR (URL), and ER (end of record). Silently ignores the
+# rest. Multi-line values are supported by continuation of the same
+# tag.
+#' @keywords internal
+read_ris_records <- function(path) {
+  lines <- readLines(path, warn = FALSE, encoding = "UTF-8")
+  # Records begin with TY - and end with ER -.
+  records <- list()
+  current <- list()
+  cur_tag <- NULL
+  flush <- function(cur, out) {
+    if (length(cur) > 0L) {
+      out[[length(out) + 1L]] <- cur
+    }
+    out
+  }
+  for (line in lines) {
+    if (!nzchar(line) || grepl("^\\s*$", line)) next
+    m <- regmatches(line, regexpr("^[A-Z][A-Z0-9]\\s+-\\s?", line))
+    if (length(m) == 1L) {
+      tag <- substr(m, 1, 2)
+      value <- substr(line, nchar(m) + 1L, nchar(line))
+      cur_tag <- tag
+      if (identical(tag, "ER")) {
+        records <- flush(current, records)
+        current <- list()
+        cur_tag <- NULL
+        next
+      }
+      # Append to any existing value under the same tag (multi-line).
+      old <- current[[tag]]
+      current[[tag]] <- if (is.null(old)) value else paste(old, value)
+    } else if (!is.null(cur_tag)) {
+      # Continuation line for the previous tag.
+      current[[cur_tag]] <- paste(current[[cur_tag]], trimws(line))
+    }
+  }
+  # In case the final record is missing an ER tag.
+  records <- flush(current, records)
+
+  if (length(records) == 0L) {
+    cli::cli_abort("No RIS records found in {.path {path}}.")
+  }
+
+  pick <- function(rec, tags) {
+    for (t in tags) if (!is.null(rec[[t]])) return(rec[[t]])
+    NA_character_
+  }
+  tibble::tibble(
+    title    = vapply(records, pick, character(1),
+                      tags = c("TI", "T1", "CT")),
+    abstract = vapply(records, pick, character(1),
+                      tags = c("AB", "N2")),
+    year     = vapply(records, pick, character(1),
+                      tags = c("PY", "Y1", "DA")),
+    doi      = vapply(records, pick, character(1),
+                      tags = c("DO", "DI")),
+    journal  = vapply(records, pick, character(1),
+                      tags = c("JO", "T2", "JF", "JA")),
+    url      = vapply(records, pick, character(1),
+                      tags = c("UR", "L1"))
+  )
+}
+
+#' Detect and remove duplicate records
+#'
+#' Two records are considered duplicates if they share a non-missing DOI
+#' (case-insensitive) or if their normalised titles match. Title
+#' normalisation drops punctuation, lowercases, collapses whitespace, and
+#' (optionally) fuzzy-matches with `stringdist` if that package is
+#' available. Returns the input tibble with an added `duplicate_of`
+#' column: `NA` for unique records, otherwise the id of the earlier
+#' record that duplicates it.
+#'
+#' Multi-database searches (Scopus, Web of Science, Google Scholar) often
+#' produce 10-20 percent duplicates; running this on the fresh corpus
+#' before ranking avoids scoring the same abstract three or four times.
+#'
+#' @param records A tibble of records from `read_records()`.
+#' @param fuzzy Whether to fuzzy-match titles (Jaro-Winkler similarity
+#'   >= 0.95). Requires the `stringdist` package; falls back to exact
+#'   normalised-title match if `stringdist` is not installed.
+#' @return The input tibble with a new `duplicate_of` column.
+#' @export
+#' @examples
+#' recs <- data.frame(
+#'   id = c("a", "b", "c"),
+#'   title = c("Coral reefs", "Coral Reefs.", "Deep sea"),
+#'   abstract = c("x", "x", "y")
+#' )
+#' find_duplicates(recs)
+find_duplicates <- function(records, fuzzy = TRUE) {
+  stopifnot(is.data.frame(records), "title" %in% names(records))
+  n <- nrow(records)
+  ids <- if ("id" %in% names(records)) records$id else
+    sprintf("record_%05d", seq_len(n))
+  norm_title <- normalise_title(records$title)
+  doi <- if ("doi" %in% names(records))
+    normalise_doi(records$doi) else rep(NA_character_, n)
+
+  duplicate_of <- rep(NA_character_, n)
+  seen_titles <- new.env(parent = emptyenv())
+  seen_dois <- new.env(parent = emptyenv())
+  for (i in seq_len(n)) {
+    tkey <- norm_title[i]
+    dkey <- doi[i]
+    if (!is.na(dkey) && nzchar(dkey) && exists(dkey, envir = seen_dois)) {
+      duplicate_of[i] <- get(dkey, envir = seen_dois)
+      next
+    }
+    if (nzchar(tkey) && exists(tkey, envir = seen_titles)) {
+      duplicate_of[i] <- get(tkey, envir = seen_titles)
+      next
+    }
+    if (isTRUE(fuzzy) && rlang::is_installed("stringdist") && nzchar(tkey)) {
+      prior <- ls(seen_titles)
+      if (length(prior) > 0L) {
+        sims <- 1 - stringdist::stringdist(tkey, prior, method = "jw")
+        best <- which.max(sims)
+        if (sims[best] >= 0.95) {
+          duplicate_of[i] <- get(prior[best], envir = seen_titles)
+          next
+        }
+      }
+    }
+    if (nzchar(tkey)) assign(tkey, ids[i], envir = seen_titles)
+    if (!is.na(dkey) && nzchar(dkey)) assign(dkey, ids[i], envir = seen_dois)
+  }
+  records$duplicate_of <- duplicate_of
+  records
+}
+
+#' @keywords internal
+normalise_title <- function(x) {
+  s <- tolower(as.character(x))
+  s <- gsub("[^a-z0-9 ]", " ", s)
+  s <- gsub("\\s+", " ", s)
+  trimws(s)
+}
+
+#' @keywords internal
+normalise_doi <- function(x) {
+  s <- tolower(trimws(as.character(x)))
+  s <- sub("^https?://(dx\\.)?doi\\.org/", "", s)
+  s <- sub("^doi:\\s*", "", s)
+  s[is.na(s) | !nzchar(s)] <- NA_character_
+  s
 }
 
 #' @keywords internal

@@ -1,6 +1,9 @@
 ^\.git$
 ^\.gitignore$
 ^\.github$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
 ^\.Rproj\.user$
 ^\.Rhistory$
 ^\.RData$

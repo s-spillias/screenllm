@@ -20,7 +20,8 @@ mod_corpus_ui <- function(id) {
       shiny::actionButton(ns("use_toy"), "Or load the toy Habitat Effect corpus",
                           class = "btn-outline-secondary"),
       shiny::hr(),
-      shiny::uiOutput(ns("summary"))
+      shiny::uiOutput(ns("summary")),
+      shiny::uiOutput(ns("dup_banner"))
     ),
     bslib::card(
       bslib::card_header("Preview"),
@@ -32,6 +33,7 @@ mod_corpus_ui <- function(id) {
 #' @keywords internal
 mod_corpus_server <- function(id, state) {
   shiny::moduleServer(id, function(input, output, session) {
+    ns <- session$ns
 
     # Ensure a project exists before we try to save anything to disk.
     # If none has been picked on Setup, create a "default" project so
@@ -124,6 +126,63 @@ mod_corpus_server <- function(id, state) {
           sum(!nzchar(r$abstract) | is.na(r$abstract))
         )
       )
+    })
+
+    # Detect duplicates whenever records change. Kept out of the
+    # summary reactive so the (potentially slow) fuzzy match runs
+    # once per load, not on every render.
+    dup_flag <- shiny::reactiveVal(NULL)
+    shiny::observeEvent(state$records, ignoreNULL = TRUE, {
+      r <- state$records
+      if (nrow(r) > 2000L) {
+        dup_flag(list(skipped = TRUE, n_dup = NA_integer_))
+      } else {
+        flagged <- find_duplicates(r)
+        n_dup <- sum(!is.na(flagged$duplicate_of))
+        dup_flag(list(skipped = FALSE, n_dup = n_dup, flagged = flagged))
+      }
+    })
+
+    output$dup_banner <- shiny::renderUI({
+      d <- dup_flag()
+      if (is.null(d)) return(NULL)
+      if (isTRUE(d$skipped)) {
+        return(shiny::tags$div(
+          class = "alert alert-info py-1 my-1",
+          shiny::tags$small(
+            "Corpus is large (>2000 records); duplicate detection skipped in the app. ",
+            shiny::tags$code("find_duplicates()"), " runs it from the R console."
+          )
+        ))
+      }
+      if (d$n_dup == 0L) return(shiny::tags$div(
+        class = "alert alert-success py-1 my-1",
+        shiny::tags$small("No duplicates detected (by DOI or title).")
+      ))
+      shiny::tags$div(
+        class = "alert alert-warning py-1 my-1",
+        shiny::tags$small(sprintf(
+          "Detected %d likely duplicate record%s (DOI or normalised title match).",
+          d$n_dup, if (d$n_dup == 1L) "" else "s"
+        )),
+        shiny::actionButton(ns("dedup"), "Remove duplicates",
+                            class = "btn-sm btn-outline-warning mt-1")
+      )
+    })
+
+    shiny::observeEvent(input$dedup, {
+      d <- dup_flag()
+      if (is.null(d) || isTRUE(d$skipped) || d$n_dup == 0L) return(NULL)
+      keep <- is.na(d$flagged$duplicate_of)
+      new <- state$records[keep, , drop = FALSE]
+      state$records <- new
+      if (!is.null(state$project)) save_artefact(state$project, "records", new)
+      shiny::showNotification(
+        sprintf("Removed %d duplicate record%s. %d remain.",
+                d$n_dup, if (d$n_dup == 1L) "" else "s", nrow(new)),
+        duration = 4
+      )
+      dup_flag(list(skipped = FALSE, n_dup = 0L))
     })
 
     output$preview <- DT::renderDT({

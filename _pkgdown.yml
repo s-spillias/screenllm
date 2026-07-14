@@ -1,0 +1,68 @@
+url: https://s-spillias.github.io/screenllm/
+
+template:
+  bootstrap: 5
+
+navbar:
+  structure:
+    left:  [intro, reference, articles, news]
+    right: [github]
+
+reference:
+- title: Corpus + criteria
+  contents:
+  - read_records
+  - read_decisions
+  - find_duplicates
+  - define_criteria
+  - build_prompt
+
+- title: Ensembles + backends
+  contents:
+  - default_ensemble
+  - default_ensemble_light
+  - custom_ensemble
+  - backend_ollama
+  - backend_mock
+
+- title: Ranking + stopping
+  contents:
+  - pilot
+  - rank_records
+  - plan_screening
+  - estimate_runtime
+
+- title: Setup + Ollama
+  contents:
+  - install_prereqs
+  - check_setup
+  - ollama_health
+  - pull_model
+
+- title: Shiny apps
+  contents:
+  - launch_app
+  - launch_screening_app
+
+- title: Projects
+  contents:
+  - data_root
+  - list_projects
+  - project_dir
+  - list_project_artefacts
+  - save_artefact
+  - load_artefact
+  - delete_artefact
+  - project_cache_dir
+
+- title: Async ranking
+  contents:
+  - start_rank_job
+  - rank_job_status
+  - rank_job_cancel
+
+- title: Reporting
+  contents:
+  - summarise_screening
+  - audit_disagreements
+  - export_worksheet
