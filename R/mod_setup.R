@@ -461,6 +461,31 @@ mod_setup_server <- function(id, state) {
         NULL
       })
       if (is.null(ens)) return(NULL)
+
+      # Cross-check the ensemble's models against what Ollama has
+      # installed. Saving an ensemble that references missing models
+      # produces a "successful" ranking with all-NA scores, which is
+      # far worse than a hard error.
+      installed <- ollama_state()$installed
+      missing <- setdiff(ens$models, installed)
+      if (length(missing) > 0L) {
+        shiny::showNotification(
+          shiny::tags$div(
+            shiny::tags$strong("Cannot save: models not installed."),
+            shiny::tags$br(),
+            shiny::tags$span(
+              sprintf("Ollama does not have %d of %d model%s in this ensemble: ",
+                      length(missing), length(ens$models),
+                      if (length(ens$models) == 1L) "" else "s"),
+              shiny::tags$code(paste(missing, collapse = ", ")),
+              ". Ranking would return no scores. Pull them first (Pull button above, or the 'Pull missing' button)."
+            )
+          ),
+          type = "error", duration = 12
+        )
+        return(NULL)
+      }
+
       state$ensemble <- ens
       save_artefact(state$project, "ensemble", ens)
       shiny::showNotification(

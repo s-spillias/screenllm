@@ -138,8 +138,35 @@ rank_records <- function(records,
       scores,
       function(s) if (is.null(s$explanation)) NA_character_ else as.character(s$explanation),
       character(1)
+    ),
+    error = vapply(
+      scores,
+      function(s) if (is.null(s$error)) NA_character_ else as.character(s$error),
+      character(1)
     )
   )
+
+  # Warn loudly if a substantial fraction of calls failed. Silence is
+  # dangerous here: the previous behaviour let "every model returned
+  # HTTP 404" complete as a successful ranking with all-NA scores,
+  # which then broke downstream (plan_screening, etc.).
+  n_failed <- sum(is.na(long$score))
+  n_total <- nrow(long)
+  fail_rate <- if (n_total > 0) n_failed / n_total else 0
+  if (fail_rate > 0.1) {
+    # Grab the first distinct error message so the user sees the cause.
+    errs <- unique(long$error[!is.na(long$error)])
+    hint <- if (length(errs) > 0L) sprintf(" First error: %s.", errs[1]) else ""
+    cli::cli_warn(c(
+      sprintf("%d of %d LLM calls (%.0f%%) failed and returned NA.",
+              n_failed, n_total, 100 * fail_rate),
+      "i" = sprintf(
+        "This usually means the model isn't installed on Ollama, ",
+        "the daemon is unreachable, or the model returns malformed JSON.%s",
+        hint
+      )
+    ))
+  }
 
   agg <- long |>
     dplyr::group_by(.data$id) |>

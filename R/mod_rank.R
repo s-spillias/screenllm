@@ -116,11 +116,29 @@ mod_rank_server <- function(id, state) {
         }
         proj <- state$project
         if (identical(st$status, "done") && !(proj %in% rank_notified())) {
-          shiny::showNotification(
-            sprintf("Ranking complete for project \"%s\" (%d records).",
-                    proj, nrow(state$ranked %||% data.frame())),
-            type = "message", duration = 8
-          )
+          # Detect the all-NA case (every LLM call failed but the
+          # worker "succeeded"). This happens when models aren't
+          # installed or the daemon dies mid-run.
+          r <- state$ranked
+          fail_rate <- if (!is.null(r) && "universal_best_score" %in% names(r) &&
+                             nrow(r) > 0) {
+            mean(is.na(r$universal_best_score))
+          } else 0
+          if (fail_rate > 0.1) {
+            shiny::showNotification(
+              sprintf(
+                "Ranking finished but %.0f%% of records got no score. Check that the ensemble's models are installed (Setup tab), then re-run.",
+                100 * fail_rate
+              ),
+              type = "warning", duration = 15
+            )
+          } else {
+            shiny::showNotification(
+              sprintf("Ranking complete for project \"%s\" (%d records).",
+                      proj, nrow(r %||% data.frame())),
+              type = "message", duration = 8
+            )
+          }
           rank_notified(c(rank_notified(), proj))
         } else if (identical(st$status, "error") &&
                      !(proj %in% rank_notified())) {

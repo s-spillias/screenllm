@@ -78,7 +78,14 @@ ollama_score <- function(model, prompt, temperature,
     options = list(temperature = temperature),
     format = "json"
   )
+  # `error` is filled in by any failure path (HTTP error, JSON parse
+  # error, out-of-range score). Callers can distinguish
+  # missing-model / auth failures from an all-timeouts run.
+  na_result <- function(error) {
+    list(score = NA_real_, explanation = NA_character_, error = error)
+  }
   attempt <- 0L
+  last_error <- NA_character_
   while (attempt < max_retries) {
     attempt <- attempt + 1L
     resp <- try(
@@ -89,10 +96,28 @@ ollama_score <- function(model, prompt, temperature,
         httr2::req_perform(),
       silent = TRUE
     )
-    if (inherits(resp, "try-error") || httr2::resp_status(resp) != 200L) {
-      if (attempt >= max_retries) {
-        return(list(score = NA_real_, explanation = NA_character_))
-      }
+    if (inherits(resp, "try-error")) {
+      last_error <- sprintf("transport error: %s",
+                             conditionMessage(attr(resp, "condition")))
+      if (attempt >= max_retries) return(na_result(last_error))
+      Sys.sleep(min(2^attempt, 30))
+      next
+    }
+    status <- httr2::resp_status(resp)
+    if (status != 200L) {
+      # Try to read the JSON error body so the user sees a useful
+      # message. Ollama returns {"error": "model 'X' not found"}.
+      msg <- tryCatch({
+        b <- httr2::resp_body_json(resp)
+        b$error %||% b$message %||% sprintf("HTTP %d", status)
+      }, error = function(e) sprintf("HTTP %d", status))
+      last_error <- sprintf("HTTP %d: %s", status, msg)
+      # 4xx errors (bad model name, unauthorised, bad request) are
+      # permanent; retrying them just wastes time. Give up
+      # immediately. 5xx and unknown errors get the exponential-
+      # backoff treatment.
+      if (status >= 400L && status < 500L) return(na_result(last_error))
+      if (attempt >= max_retries) return(na_result(last_error))
       Sys.sleep(min(2^attempt, 30))
       next
     }
@@ -100,17 +125,32 @@ ollama_score <- function(model, prompt, temperature,
       httr2::resp_body_json(resp, simplifyVector = TRUE),
       silent = TRUE
     )
-    if (inherits(body_json, "try-error")) next
+    if (inherits(body_json, "try-error")) {
+      last_error <- "response body was not valid JSON"
+      if (attempt >= max_retries) return(na_result(last_error))
+      next
+    }
     parsed <- try(jsonlite::fromJSON(body_json$response), silent = TRUE)
-    if (inherits(parsed, "try-error")) next
+    if (inherits(parsed, "try-error")) {
+      last_error <- "model response was not valid JSON"
+      if (attempt >= max_retries) return(na_result(last_error))
+      next
+    }
     score <- suppressWarnings(as.numeric(parsed$relevance %||% NA))
-    if (length(score) != 1L || is.na(score) || score < 0 || score > 100) next
+    if (length(score) != 1L || is.na(score) || score < 0 || score > 100) {
+      last_error <- sprintf("relevance field missing or out of range: %s",
+                             substr(as.character(parsed$relevance %||% "(none)"),
+                                    1, 100))
+      if (attempt >= max_retries) return(na_result(last_error))
+      next
+    }
     return(list(
       score = score,
-      explanation = as.character(parsed$explanation %||% "")
+      explanation = as.character(parsed$explanation %||% ""),
+      error = NA_character_
     ))
   }
-  list(score = NA_real_, explanation = NA_character_)
+  na_result(last_error)
 }
 
 `%||%` <- function(a, b) if (is.null(a)) b else a
