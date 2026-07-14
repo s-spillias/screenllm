@@ -79,7 +79,13 @@ plan_screening <- function(ranked,
   # (score < 50 = probable reject) as a placeholder for the SAFE preview,
   # and expose the gate positions the human will need to update after
   # screening actually begins.
-  probable_accept <- ranked$universal_best_score >= 50
+  #
+  # Any record with a missing universal_best_score (e.g. every LLM call
+  # for that record failed or timed out) is treated as a probable
+  # reject; otherwise NA would propagate through the cumulative sum
+  # and the run-length gate check below and abort the whole walk.
+  probable_accept <- !is.na(ranked$universal_best_score) &
+    ranked$universal_best_score >= 50
   cum_positives <- cumsum(probable_accept)
 
   consecutive_neg <- integer(N)

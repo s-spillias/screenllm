@@ -51,3 +51,22 @@ test_that("plan_screening returns a stop point and a to-screen subset", {
   expect_true(plan$stop_at >= 1L && plan$stop_at <= nrow(ranked))
   expect_equal(nrow(plan$to_screen), plan$stop_at)
 })
+
+test_that("plan_screening tolerates NA universal_best_score", {
+  # Regression: some records may end up with NA scores if every LLM
+  # call for them failed (timeout, malformed response, ...). Without
+  # the NA guard in plan_screening() this used to abort with
+  # "missing value where TRUE/FALSE needed" on the SAFE walk.
+  ranked <- data.frame(
+    id = paste0("r", 1:20),
+    universal_best_score = c(seq(90, 55, length.out = 10),  # good scores
+                              rep(NA_real_, 3),               # NAs
+                              seq(50, 10, length.out = 7)),   # low scores
+    rank = 1:20,
+    stringsAsFactors = FALSE
+  )
+  plan <- plan_screening(ranked, safe_run_length = 3L,
+                          safe_min_cover = 0.2, spot_check_n = 5L)
+  expect_s3_class(plan, "screenllm_plan")
+  expect_true(plan$stop_at >= 1L && plan$stop_at <= nrow(ranked))
+})

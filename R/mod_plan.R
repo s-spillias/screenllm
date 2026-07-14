@@ -29,16 +29,30 @@ mod_plan_ui <- function(id) {
 #' @keywords internal
 mod_plan_server <- function(id, state) {
   shiny::moduleServer(id, function(input, output, session) {
+    # Track the last plan_screening error so we can display it in the
+    # summary panel instead of letting it propagate and grey out the
+    # app. Cleared whenever a fresh computation succeeds.
+    plan_error <- shiny::reactiveVal(NULL)
+
     live_plan <- shiny::reactive({
       r <- state$ranked
       if (is.null(r)) return(NULL)
-      plan_screening(
-        r,
-        target_recall = input$target_recall,
-        safe_min_cover = input$min_cover,
-        safe_run_length = as.integer(input$run_length),
-        spot_check_n = as.integer(input$spot_check_n)
+      out <- tryCatch(
+        plan_screening(
+          r,
+          target_recall = input$target_recall,
+          safe_min_cover = input$min_cover,
+          safe_run_length = as.integer(input$run_length),
+          spot_check_n = as.integer(input$spot_check_n)
+        ),
+        error = function(e) e
       )
+      if (inherits(out, "error")) {
+        plan_error(conditionMessage(out))
+        return(NULL)
+      }
+      plan_error(NULL)
+      out
     })
 
     output$score_plot <- shiny::renderPlot({
@@ -60,6 +74,15 @@ mod_plan_server <- function(id, state) {
 
     output$summary <- shiny::renderUI({
       plan <- live_plan()
+      err <- plan_error()
+      if (!is.null(err)) {
+        return(shiny::tags$div(
+          class = "alert alert-danger py-2 my-1",
+          shiny::tags$strong("plan_screening() failed:"),
+          shiny::tags$br(),
+          shiny::tags$code(err)
+        ))
+      }
       if (is.null(plan)) return(shiny::em("Waiting for a ranked corpus."))
       shiny::tags$ul(
         shiny::tags$li(sprintf("Stop at record %d of %d", plan$stop_at, plan$N)),
