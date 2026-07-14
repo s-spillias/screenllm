@@ -86,13 +86,15 @@ start_rank_job <- function(project, ensemble = default_ensemble()) {
 #'
 #' @param project Project name.
 #' @return A list with `status` (`"starting"`, `"running"`, `"done"`, or
-#'   `"error"`), `processed`, `total`, `percent`, and optionally
-#'   `error` and `elapsed_secs`.
+#'   `"error"`), `processed`, `total`, `percent`, `current_model`,
+#'   `eta_secs`, and optionally `error` and `elapsed_secs`.
 #' @export
 rank_job_status <- function(project) {
   st <- load_artefact(project, "progress")
   if (is.null(st)) {
-    return(list(status = "idle", processed = 0L, total = NA_integer_, percent = 0))
+    return(list(status = "idle", processed = 0L, total = NA_integer_,
+                percent = 0, current_model = NA_character_,
+                eta_secs = NA_real_))
   }
   pct <- if (isTRUE(st$total > 0)) round(100 * st$processed / st$total, 1) else 0
   elapsed <- if (!is.null(st$started_at)) {
@@ -101,7 +103,19 @@ rank_job_status <- function(project) {
       as.numeric(Sys.time() - started, units = "secs")
     } else NA_real_
   } else NA_real_
-  c(st, list(percent = pct, elapsed_secs = elapsed))
+  # ETA = remaining_calls / rate_calls_per_sec.
+  # Only report once we have >= a few seconds of data so the estimate
+  # doesn't flicker wildly at start-up.
+  eta_secs <- NA_real_
+  if (!is.na(elapsed) && elapsed > 5 &&
+        !is.null(st$processed) && st$processed > 0 &&
+        !is.null(st$total) && st$total > st$processed) {
+    rate <- st$processed / elapsed
+    if (is.finite(rate) && rate > 0) {
+      eta_secs <- (st$total - st$processed) / rate
+    }
+  }
+  c(st, list(percent = pct, elapsed_secs = elapsed, eta_secs = eta_secs))
 }
 
 #' Cancel a running ranking job
@@ -136,10 +150,13 @@ rank_worker_body <- function(project, cache_dir, progress_path, ranked_path, lib
   replicates <- ensemble$replicates
   total      <- n_records * n_models * replicates
 
+  # Fixed timestamp so ETA is measured from the actual job start,
+  # not from each throttled progress write.
+  started_at <- format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z")
   saveRDS(list(
     status = "running", processed = 0L, total = total,
-    started_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
-    error = NULL
+    started_at = started_at, error = NULL,
+    current_model = NA_character_
   ), progress_path)
 
   # Wrap the ensemble backend so we can count completed scoring calls
@@ -160,7 +177,8 @@ rank_worker_body <- function(project, cache_dir, progress_path, ranked_path, lib
         status = "running",
         processed = progress_counter$n,
         total = total,
-        started_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
+        current_model = model,
+        started_at = started_at,
         error = NULL
       ), progress_path)
       progress_counter$last_write <- now
@@ -178,7 +196,8 @@ rank_worker_body <- function(project, cache_dir, progress_path, ranked_path, lib
         status = "error",
         processed = progress_counter$n,
         total = total,
-        started_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
+        current_model = NA_character_,
+        started_at = started_at,
         error = conditionMessage(e)
       ), progress_path)
       stop(e)
@@ -188,8 +207,8 @@ rank_worker_body <- function(project, cache_dir, progress_path, ranked_path, lib
   saveRDS(ranked, ranked_path)
   saveRDS(list(
     status = "done", processed = total, total = total,
-    started_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
-    error = NULL
+    current_model = NA_character_,
+    started_at = started_at, error = NULL
   ), progress_path)
   invisible(TRUE)
 }

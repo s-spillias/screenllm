@@ -1,5 +1,16 @@
 # Rank tab: start async ranking job, poll progress, review outputs.
 
+# Format seconds as HH:MM:SS (or MM:SS if under an hour). Small utility
+# used by the status line; kept local to this module.
+fmt_hms <- function(secs) {
+  if (is.na(secs) || !is.finite(secs) || secs < 0) return("-")
+  h <- floor(secs / 3600)
+  m <- floor((secs %% 3600) / 60)
+  s <- floor(secs %% 60)
+  if (h > 0) sprintf("%d:%02d:%02d", h, m, s)
+  else sprintf("%d:%02d", m, s)
+}
+
 #' @keywords internal
 mod_rank_ui <- function(id) {
   ns <- shiny::NS(id)
@@ -128,11 +139,21 @@ mod_rank_server <- function(id, state) {
       st <- poll()
       if (is.null(st) || identical(st$status, "idle")) return("Idle.")
       elapsed <- if (!is.null(st$elapsed_secs) && is.finite(st$elapsed_secs)) {
-        sprintf(" (%.0f s elapsed)", st$elapsed_secs)
+        sprintf(" | elapsed %s", fmt_hms(st$elapsed_secs))
+      } else ""
+      eta <- if (!is.null(st$eta_secs) && is.finite(st$eta_secs) &&
+                   identical(st$status, "running")) {
+        sprintf(" | ETA %s", fmt_hms(st$eta_secs))
+      } else ""
+      model <- if (!is.null(st$current_model) && !is.na(st$current_model) &&
+                     nzchar(st$current_model) &&
+                     identical(st$status, "running")) {
+        sprintf(" | scoring %s", st$current_model)
       } else ""
       err <- if (isTRUE(nzchar(st$error))) sprintf(" | ERROR: %s", st$error) else ""
-      sprintf("%s - %d/%d (%.1f%%)%s%s",
-              toupper(st$status), st$processed, st$total, st$percent, elapsed, err)
+      sprintf("%s - %d/%d (%.1f%%)%s%s%s%s",
+              toupper(st$status), st$processed, st$total, st$percent,
+              elapsed, eta, model, err)
     })
 
     output$progress_plot <- shiny::renderPlot({
