@@ -28,7 +28,13 @@ mod_pilot_ui <- function(id) {
     ),
     bslib::card(
       bslib::card_header("Pilot results"),
-      shiny::verbatimTextOutput(ns("results"))
+      DT::DTOutput(ns("results_table")),
+      shiny::tags$hr(),
+      shiny::tags$small(
+        class = "text-muted",
+        "Click a row to expand its per-model justifications."
+      ),
+      shiny::verbatimTextOutput(ns("details"))
     )
   )
 }
@@ -74,13 +80,53 @@ mod_pilot_server <- function(id, state) {
       pilot_out(out)
     })
 
-    output$results <- shiny::renderPrint({
+    # Render the pilot output as a sortable DT (score-ordered) so the
+    # user can visually skim the ensemble's decisions. Selecting a row
+    # reveals the raw per-model justifications below the table.
+    output$results_table <- DT::renderDT({
       p <- pilot_out()
-      if (is.null(p)) {
-        cat("(no pilot run yet)\n")
-        return(invisible())
+      if (is.null(p)) return(NULL)
+      p <- p[order(-p$universal_best_score), , drop = FALSE]
+      # Preview of the first justification, truncated for the table.
+      preview <- vapply(p$justifications, function(js) {
+        if (is.null(js) || nrow(js) == 0L) return("")
+        m <- js$explanation[nzchar(js$explanation) & !is.na(js$explanation)]
+        if (length(m) == 0L) return("")
+        substr(gsub("\\s+", " ", m[1]), 1, 220)
+      }, character(1))
+      tbl <- data.frame(
+        id = p$id,
+        score = round(p$universal_best_score),
+        title = p$title,
+        justification_preview = preview,
+        stringsAsFactors = FALSE
+      )
+      DT::datatable(
+        tbl,
+        options = list(pageLength = 15, autoWidth = FALSE, scrollX = TRUE),
+        rownames = FALSE, selection = "single",
+        class = "compact"
+      )
+    })
+
+    # When the user picks a row, print all justifications for that
+    # record verbatim so they can read what each model said.
+    output$details <- shiny::renderText({
+      p <- pilot_out()
+      sel <- input$results_table_rows_selected
+      if (is.null(p) || is.null(sel) || length(sel) == 0L) {
+        return("(select a row above to see per-model justifications)")
       }
-      print(p)
+      p <- p[order(-p$universal_best_score), , drop = FALSE]
+      rec <- p[sel[1L], ]
+      js <- rec$justifications[[1L]]
+      if (is.null(js) || nrow(js) == 0L) return("(no justifications recorded)")
+      lines <- vapply(seq_len(nrow(js)), function(i) {
+        sprintf("[%s / rep %d]\n%s",
+                js$model[i], js$replicate[i],
+                gsub("\\s+", " ", js$explanation[i] %||% ""))
+      }, character(1))
+      paste(lines, collapse = "\n\n")
     })
   })
 }
