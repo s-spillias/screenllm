@@ -118,17 +118,23 @@ mod_pilot_server <- function(id, state) {
 
     # Poll the progress file every 500 ms. As soon as a record has been
     # scored, the reactivePoll fires and the DT below re-renders with
-    # the current partial results.
+    # the current partial results. The path is per-job (returned in
+    # the handle) so concurrent pilots and unrelated tests can't
+    # overwrite each other's progress.
     pilot_status <- shiny::reactivePoll(
       intervalMillis = 500,
       session = session,
       checkFunc = function() {
-        path <- pilot_progress_path()
+        j <- pilot_handle()
+        if (is.null(j)) return(0)
+        path <- j$progress_path
         if (!fs::file_exists(path)) return(0)
         file.info(path)$mtime
       },
       valueFunc = function() {
-        st <- pilot_job_status()
+        j <- pilot_handle()
+        if (is.null(j)) return(NULL)
+        st <- pilot_job_status(j$progress_path)
         # Fire the completion toast exactly once when the worker
         # transitions to done/error, so long-lived polls don't spam.
         if (identical(st$status, "done") && !isTRUE(completion_fired())) {
@@ -138,7 +144,6 @@ mod_pilot_server <- function(id, state) {
             type = "message", duration = 5
           )
           completion_fired(TRUE)
-          pilot_handle(NULL)
         } else if (identical(st$status, "error") &&
                      !isTRUE(completion_fired())) {
           shiny::showNotification(
@@ -146,8 +151,9 @@ mod_pilot_server <- function(id, state) {
             type = "error", duration = 8
           )
           completion_fired(TRUE)
-          pilot_handle(NULL)
         }
+        # Keep pilot_handle set so the table stays populated after
+        # completion; a new Run click overwrites it with the fresh job.
         st
       }
     )

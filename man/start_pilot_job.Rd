@@ -4,7 +4,15 @@
 \alias{start_pilot_job}
 \title{Start a background pilot job}
 \usage{
-start_pilot_job(records, criteria, ensemble, n = 20L, sample = TRUE, seed = 1L)
+start_pilot_job(
+  records,
+  criteria,
+  ensemble,
+  n = 20L,
+  sample = TRUE,
+  seed = 1L,
+  progress_dir = NULL
+)
 }
 \arguments{
 \item{records}{A tibble of records (from \code{read_records()}).}
@@ -19,9 +27,16 @@ start_pilot_job(records, criteria, ensemble, n = 20L, sample = TRUE, seed = 1L)
 first \code{n} rows.}
 
 \item{seed}{Random seed for the sample.}
+
+\item{progress_dir}{Directory in which to write the per-job
+progress and input files. Defaults to
+\code{tools::R_user_dir("screenllm", "cache")/pilots}. Each
+invocation writes a uniquely-named pair of files inside this
+directory so concurrent pilots never overwrite each other.}
 }
 \value{
-A list with \code{pid}, \code{handle}, and \code{progress_path}.
+A list with \code{pid}, \code{handle}, \code{job_id}, \code{progress_path},
+and \code{input_path}.
 }
 \description{
 Spawns a \code{callr::r_bg} subprocess that samples \code{n} records from

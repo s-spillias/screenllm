@@ -4,7 +4,11 @@
 \alias{pilot_job_status}
 \title{Status of a background pilot job}
 \usage{
-pilot_job_status()
+pilot_job_status(progress_path)
+}
+\arguments{
+\item{progress_path}{Path to the pilot's progress file (returned
+in the handle by \code{start_pilot_job()}).}
 }
 \value{
 A list with \code{status} (\code{"idle"}, \code{"starting"}, \code{"running"},

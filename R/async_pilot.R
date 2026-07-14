@@ -24,10 +24,17 @@
 #' @param sample Whether to sample at random (default) or take the
 #'   first `n` rows.
 #' @param seed Random seed for the sample.
-#' @return A list with `pid`, `handle`, and `progress_path`.
+#' @param progress_dir Directory in which to write the per-job
+#'   progress and input files. Defaults to
+#'   `tools::R_user_dir("screenllm", "cache")/pilots`. Each
+#'   invocation writes a uniquely-named pair of files inside this
+#'   directory so concurrent pilots never overwrite each other.
+#' @return A list with `pid`, `handle`, `job_id`, `progress_path`,
+#'   and `input_path`.
 #' @export
 start_pilot_job <- function(records, criteria, ensemble,
-                            n = 20L, sample = TRUE, seed = 1L) {
+                            n = 20L, sample = TRUE, seed = 1L,
+                            progress_dir = NULL) {
   rlang::check_installed("callr", "to run the pilot in the background.")
   stopifnot(
     is.data.frame(records),
@@ -43,9 +50,21 @@ start_pilot_job <- function(records, criteria, ensemble,
   }
   subset <- records[idx, , drop = FALSE]
 
-  progress_path <- pilot_progress_path()
-  input_path <- fs::path(fs::path_dir(progress_path), "input.rds")
-  fs::dir_create(fs::path_dir(progress_path), recurse = TRUE)
+  # Per-invocation progress and input files so two concurrent pilots
+  # (multiple browser tabs, unrelated tests running in another R
+  # process, a stale worker still alive) can never overwrite each
+  # other's progress. Callers who want a deterministic location can
+  # pass `progress_dir`.
+  progress_dir <- progress_dir %||% fs::path(
+    tools::R_user_dir("screenllm", "cache"), "pilots"
+  )
+  fs::dir_create(progress_dir, recurse = TRUE)
+  job_id <- paste0(sample(c(letters, 0:9), 12, replace = TRUE),
+                    collapse = "")
+  progress_path <- fs::path(progress_dir,
+                             sprintf("progress-%s.rds", job_id))
+  input_path <- fs::path(progress_dir,
+                          sprintf("input-%s.rds", job_id))
   saveRDS(list(records = subset, criteria = criteria, ensemble = ensemble),
           input_path)
   saveRDS(list(
@@ -69,23 +88,33 @@ start_pilot_job <- function(records, criteria, ensemble,
   )
   list(pid = handle$get_pid(),
        handle = handle,
-       progress_path = progress_path)
+       job_id = job_id,
+       progress_path = progress_path,
+       input_path = input_path)
 }
 
 #' Status of a background pilot job
 #'
+#' @param progress_path Path to the pilot's progress file (returned
+#'   in the handle by `start_pilot_job()`).
 #' @return A list with `status` (`"idle"`, `"starting"`, `"running"`,
 #'   `"done"`, or `"error"`), `processed`, `total`, `percent`,
 #'   `results` (a list of scored records so far), `error`, and
 #'   `elapsed_secs`.
 #' @export
-pilot_job_status <- function() {
-  path <- pilot_progress_path()
-  if (!fs::file_exists(path)) {
+pilot_job_status <- function(progress_path) {
+  if (missing(progress_path) || is.null(progress_path)) {
+    cli::cli_abort(
+      "{.arg progress_path} is required. Pass \\
+       the {.field progress_path} field of the object returned by \\
+       {.fn start_pilot_job}."
+    )
+  }
+  if (!fs::file_exists(progress_path)) {
     return(list(status = "idle", processed = 0L, total = NA_integer_,
                 percent = 0, results = list()))
   }
-  st <- readRDS(path)
+  st <- readRDS(progress_path)
   pct <- if (isTRUE(st$total > 0) && !is.na(st$processed)) {
     round(100 * st$processed / st$total, 1)
   } else 0
@@ -232,9 +261,3 @@ pilot_worker_body <- function(input_path, progress_path, libpaths) {
   })
 }
 
-# --------------------------------------------------------------------
-#' @keywords internal
-pilot_progress_path <- function() {
-  fs::path(tools::R_user_dir("screenllm", "cache"),
-           "pilots", "progress.rds")
-}
