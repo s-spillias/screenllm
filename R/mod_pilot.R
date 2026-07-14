@@ -42,9 +42,9 @@ mod_pilot_ui <- function(id) {
       shiny::tags$hr(),
       shiny::tags$small(
         class = "text-muted",
-        "Click a row to expand its per-model justifications."
+        "Click a row above to see its per-model justifications."
       ),
-      shiny::verbatimTextOutput(ns("details"))
+      shiny::uiOutput(ns("details"))
     )
   )
 }
@@ -220,22 +220,48 @@ mod_pilot_server <- function(id, state) {
       )
     })
 
-    output$details <- shiny::renderText({
+    output$details <- shiny::renderUI({
       p <- partial()
       sel <- input$results_table_rows_selected
       if (is.null(p) || nrow(p) == 0L || is.null(sel) || length(sel) == 0L) {
-        return("(select a row above to see per-model justifications)")
+        return(shiny::tags$p(class = "text-muted fst-italic small mt-2",
+                             "No row selected."))
       }
       p <- p[order(-p$universal_best_score), , drop = FALSE]
       rec <- p[sel[1L], ]
       js <- rec$justifications[[1L]]
-      if (is.null(js) || nrow(js) == 0L) return("(no justifications recorded)")
-      lines <- vapply(seq_len(nrow(js)), function(i) {
-        sprintf("[%s / rep %d]\n%s",
-                js$model[i], js$replicate[i],
-                gsub("\\s+", " ", js$explanation[i] %||% ""))
-      }, character(1))
-      paste(lines, collapse = "\n\n")
+      if (is.null(js) || nrow(js) == 0L) {
+        return(shiny::tags$p(class = "text-muted fst-italic small mt-2",
+                             "(no justifications recorded for this record)"))
+      }
+      # Title row summarising the selected record.
+      header <- shiny::tags$div(
+        class = "mb-2",
+        shiny::tags$span(class = "badge bg-primary me-2",
+                         sprintf("score %.0f", rec$universal_best_score)),
+        shiny::tags$span(class = "fw-semibold",
+                         substr(rec$title %||% "", 1, 200))
+      )
+      # One panel per model/replicate. `text-break` + `text-wrap` on
+      # the paragraph forces long words to wrap instead of pushing a
+      # horizontal scroll bar.
+      panels <- lapply(seq_len(nrow(js)), function(i) {
+        explanation <- js$explanation[i] %||% ""
+        explanation <- gsub("\\s+", " ", explanation)
+        shiny::tags$div(
+          class = "border rounded p-2 mb-2 bg-body-tertiary",
+          shiny::tags$div(
+            class = "d-flex justify-content-between align-items-baseline mb-1",
+            shiny::tags$code(class = "small", js$model[i]),
+            shiny::tags$span(class = "small text-muted",
+                             sprintf("replicate %d", js$replicate[i]))
+          ),
+          shiny::tags$p(class = "mb-0 small text-break text-wrap",
+                        if (nzchar(explanation)) explanation
+                        else shiny::tags$em("(no explanation returned by the model)"))
+        )
+      })
+      shiny::tagList(header, panels)
     })
   })
 }
