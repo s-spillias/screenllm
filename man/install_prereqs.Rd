@@ -5,6 +5,7 @@
 \title{One-stop setup for a fresh machine}
 \usage{
 install_prereqs(
+  preset = NULL,
   models = .PINNED_DEFAULT_MODELS,
   interactive = base::interactive(),
   wait_seconds = 60L,
@@ -12,10 +13,14 @@ install_prereqs(
 )
 }
 \arguments{
+\item{preset}{One of \code{"paper"} (the four ~20-30B paper models, ~65
+GB), \code{"light"} (four ~3-7B models, ~10 GB) or \code{"none"} (skip the
+model pull). Overrides \code{models} when set. Defaults to \code{NULL},
+which means "use \code{models}".}
+
 \item{models}{Character vector of Ollama model tags to ensure are
-installed. Defaults to the four-LLM paper ensemble. Pass
-\code{default_ensemble_light()$models} (or the \code{.PINNED_LIGHT_MODELS}
-equivalent) for the laptop-friendly preset, or \code{NULL} to skip.}
+installed. Ignored if \code{preset} is supplied. Defaults to the
+four-LLM paper ensemble.}
 
 \item{interactive}{Whether to prompt the user before running install
 commands or pulling large models. Defaults to \code{base::interactive()}.
@@ -50,14 +55,13 @@ Safe to re-run: it is a no-op if everything is already in place.
 }
 \examples{
 \dontrun{
+# Laptop-friendly preset (~10 GB; runs on 8-16 GB RAM):
+install_prereqs(preset = "light")
+
 # Paper ensemble (~65 GB; needs a workstation):
-install_prereqs()
+install_prereqs(preset = "paper")
 
-# Laptop-friendly preset (~10 GB):
-install_prereqs(models = c("gemma3:4b", "llama3.2:3b",
-                           "qwen3:4b", "mistral:7b"))
-
-# Skip the model pull (just check Ollama itself):
-install_prereqs(models = NULL)
+# Check Ollama is installed without pulling any models:
+install_prereqs(preset = "none")
 }
 }

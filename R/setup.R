@@ -117,10 +117,13 @@ ollama_installed_models <- function(
 #'
 #' Safe to re-run: it is a no-op if everything is already in place.
 #'
+#' @param preset One of `"paper"` (the four ~20-30B paper models, ~65
+#'   GB), `"light"` (four ~3-7B models, ~10 GB) or `"none"` (skip the
+#'   model pull). Overrides `models` when set. Defaults to `NULL`,
+#'   which means "use `models`".
 #' @param models Character vector of Ollama model tags to ensure are
-#'   installed. Defaults to the four-LLM paper ensemble. Pass
-#'   `default_ensemble_light()$models` (or the `.PINNED_LIGHT_MODELS`
-#'   equivalent) for the laptop-friendly preset, or `NULL` to skip.
+#'   installed. Ignored if `preset` is supplied. Defaults to the
+#'   four-LLM paper ensemble.
 #' @param interactive Whether to prompt the user before running install
 #'   commands or pulling large models. Defaults to `base::interactive()`.
 #'   When `FALSE`, the function reports missing components but never
@@ -133,20 +136,27 @@ ollama_installed_models <- function(
 #' @export
 #' @examples
 #' \dontrun{
+#' # Laptop-friendly preset (~10 GB; runs on 8-16 GB RAM):
+#' install_prereqs(preset = "light")
+#'
 #' # Paper ensemble (~65 GB; needs a workstation):
-#' install_prereqs()
+#' install_prereqs(preset = "paper")
 #'
-#' # Laptop-friendly preset (~10 GB):
-#' install_prereqs(models = c("gemma3:4b", "llama3.2:3b",
-#'                            "qwen3:4b", "mistral:7b"))
-#'
-#' # Skip the model pull (just check Ollama itself):
-#' install_prereqs(models = NULL)
+#' # Check Ollama is installed without pulling any models:
+#' install_prereqs(preset = "none")
 #' }
-install_prereqs <- function(models = .PINNED_DEFAULT_MODELS,
+install_prereqs <- function(preset = NULL,
+                            models = .PINNED_DEFAULT_MODELS,
                             interactive = base::interactive(),
                             wait_seconds = 60L,
                             ollama_url = getOption("screenllm.ollama_url")) {
+  if (!is.null(preset)) {
+    preset <- match.arg(preset, c("paper", "light", "none"))
+    models <- switch(preset,
+                     paper = .PINNED_DEFAULT_MODELS,
+                     light = .PINNED_LIGHT_MODELS,
+                     none  = NULL)
+  }
   cli::cli_h1("screenllm: install prerequisites")
 
   # Step 1: is Ollama on PATH?

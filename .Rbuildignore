@@ -4,6 +4,7 @@
 ^_pkgdown\.yml$
 ^docs$
 ^pkgdown$
+^\.github/ISSUE_TEMPLATE$
 ^\.Rproj\.user$
 ^\.Rhistory$
 ^\.RData$

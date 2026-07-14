@@ -1,0 +1,52 @@
+name: Bug report
+description: Something broke or behaved unexpectedly.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: If you can, paste the exact R commands or the click path in the app.
+      placeholder: |
+        1. Launched `screenllm::launch_app()`
+        2. On Corpus tab, clicked "Load toy corpus"
+        3. Saw error: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: error
+    attributes:
+      label: Error message (verbatim)
+      description: Paste the full text of any red error message.
+      render: shell
+    validations:
+      required: false
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: e.g. "macOS 14.5 (M2)", "Windows 11", "Ubuntu 22.04"
+    validations:
+      required: true
+
+  - type: textarea
+    id: sessioninfo
+    attributes:
+      label: sessionInfo()
+      description: |
+        Paste the output of `sessionInfo()` from your R console. This tells
+        us which R version and package versions you have.
+      render: r
+    validations:
+      required: false

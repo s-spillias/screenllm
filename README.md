@@ -3,6 +3,17 @@
 Turn-key LLM-assisted title/abstract screening for systematic reviews, on a
 laptop.
 
+> ### Alpha testers, start here
+>
+> If you were invited to test-drive `screenllm`, follow the tester
+> guide instead of this README:
+> **[docs/getting-started.md](docs/getting-started.md)**
+>
+> Report issues at
+> [github.com/s-spillias/screenllm/issues/new/choose](https://github.com/s-spillias/screenllm/issues/new/choose)
+> or email <scott.spillias@csiro.au>. Common problems are covered in
+> [docs/troubleshooting.md](docs/troubleshooting.md).
+
 `screenllm` operationalises the two workflow choices systematically
 evaluated in **Spillias et al. (2026)**:
 
