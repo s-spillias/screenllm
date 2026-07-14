@@ -63,7 +63,8 @@ mod_setup_ui <- function(id) {
                                   class = "btn-outline-primary",
                                   width = "100%")
             )
-          )
+          ),
+          shiny::uiOutput(ns("pull_progress_ui"))
         )
       ),
       # Ensemble config card
@@ -147,12 +148,20 @@ mod_setup_server <- function(id, state) {
 
     # ---- Ollama panel --------------------------------------------------
 
+    # `ollama_refresh` is bumped whenever we want `ollama_state` to
+    # re-fetch: on button click, on session start (via initial value),
+    # and whenever a pull completes.
+    ollama_refresh <- shiny::reactiveVal(0L)
+    shiny::observeEvent(input$refresh_ollama, ignoreNULL = FALSE, ignoreInit = FALSE, {
+      ollama_refresh(shiny::isolate(ollama_refresh()) + 1L)
+    })
+
     ollama_state <- shiny::reactive({
-      shiny::invalidateLater(0)  # only recomputes when refresh_ollama is pressed
+      ollama_refresh()  # take a dependency; refetch when bumped
       up <- ollama_health(quiet = TRUE)
       installed <- if (up) ollama_installed_models() else character()
       list(up = up, installed = installed)
-    }) |> shiny::bindEvent(input$refresh_ollama, ignoreNULL = FALSE, ignoreInit = FALSE)
+    })
 
     output$ollama_badge <- shiny::renderUI({
       s <- ollama_state()
@@ -190,21 +199,86 @@ mod_setup_server <- function(id, state) {
                                    choices = s$installed, server = FALSE)
     })
 
+    # Track which model this session has an active pull for. Kept as a
+    # single value because the UI exposes one pull box; the underlying
+    # registry (.pull_handles) supports concurrent pulls if needed.
+    pulling_model <- shiny::reactiveVal(NULL)
+
+    # We keep an internal set of models we've already emitted a "done"
+    # notification for, so the poll doesn't fire a Notification every
+    # 500 ms after the pull completes.
+    notified <- shiny::reactiveVal(character())
+
     shiny::observeEvent(input$pull_btn, {
       tag <- trimws(input$pull_tag)
       if (!nzchar(tag)) return(NULL)
-      shiny::withProgress(
-        message = sprintf("Pulling %s...", tag),
-        value = 0.5,
-        {
-          ok <- try(pull_model(tag, verbose = FALSE), silent = TRUE)
-          shiny::showNotification(
-            if (isTRUE(ok)) sprintf("Pulled %s.", tag) else "Pull failed.",
-            type = if (isTRUE(ok)) "message" else "error", duration = 5
-          )
-        }
+      handle <- try(start_pull_job(tag), silent = TRUE)
+      if (inherits(handle, "try-error")) {
+        shiny::showNotification(attr(handle, "condition")$message,
+                                type = "error", duration = 6)
+        return(NULL)
+      }
+      pulling_model(tag)
+      shiny::showNotification(
+        sprintf("Started background pull for %s. You can keep using the app.", tag),
+        duration = 4
       )
-      shiny::updateActionButton(session, "refresh_ollama")
+    })
+
+    # Poll the pull's progress every 500 ms. Live for as long as there
+    # is a tracked model. Emits a completion notification exactly once
+    # and refreshes the Ollama panel so the model appears in the list.
+    pull_status <- shiny::reactivePoll(
+      intervalMillis = 500,
+      session = session,
+      checkFunc = function() {
+        m <- pulling_model()
+        if (is.null(m)) return(0)
+        path <- pull_progress_path(m)
+        if (!fs::file_exists(path)) return(0)
+        file.info(path)$mtime
+      },
+      valueFunc = function() {
+        m <- pulling_model()
+        if (is.null(m)) return(NULL)
+        st <- pull_job_status(m)
+        if (identical(st$status, "done") && !(m %in% notified())) {
+          shiny::showNotification(
+            sprintf("Pulled %s.", m),
+            type = "message", duration = 6
+          )
+          notified(c(notified(), m))
+          # Trigger a refresh of the installed-models list and the
+          # ensemble-hint banner without needing the user to click.
+          ollama_refresh(shiny::isolate(ollama_refresh()) + 1L)
+          pulling_model(NULL)
+        } else if (identical(st$status, "error") && !(m %in% notified())) {
+          shiny::showNotification(
+            sprintf("Pull %s failed: %s", m, st$error %||% "(no detail)"),
+            type = "error", duration = 8
+          )
+          notified(c(notified(), m))
+          pulling_model(NULL)
+        }
+        st
+      }
+    )
+
+    # A small live progress banner under the Pull button.
+    output$pull_progress_ui <- shiny::renderUI({
+      st <- pull_status()
+      if (is.null(st) || identical(st$status, "idle")) return(NULL)
+      pct <- st$percent %||% 0
+      detail <- st$detail %||% st$status
+      color <- switch(st$status,
+                      done = "success", error = "danger", "info")
+      shiny::tags$div(
+        class = sprintf("alert alert-%s py-1 my-2", color),
+        shiny::tags$small(
+          shiny::tags$strong(st$model %||% ""),
+          sprintf(" - %s (%.0f%%)", detail, pct)
+        )
+      )
     })
 
     # ---- Ensemble config ----------------------------------------------

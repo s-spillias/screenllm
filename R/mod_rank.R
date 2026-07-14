@@ -82,6 +82,10 @@ mod_rank_server <- function(id, state) {
       }
     })
 
+    # Set of projects we've already emitted a completion notification
+    # for, so the poll doesn't keep firing a Notification after done.
+    rank_notified <- shiny::reactiveVal(character())
+
     # Poll the progress file every 500 ms while a job is running.
     poll <- shiny::reactivePoll(
       intervalMillis = 500,
@@ -94,9 +98,27 @@ mod_rank_server <- function(id, state) {
       valueFunc = function() {
         if (is.null(state$project)) return(NULL)
         st <- rank_job_status(state$project)
-        # If the job just finished, load the ranked object.
+        # If the job just finished, load the ranked object and notify
+        # the user once (only).
         if (identical(st$status, "done") && is.null(state$ranked)) {
           state$ranked <- load_artefact(state$project, "ranked")
+        }
+        proj <- state$project
+        if (identical(st$status, "done") && !(proj %in% rank_notified())) {
+          shiny::showNotification(
+            sprintf("Ranking complete for project \"%s\" (%d records).",
+                    proj, nrow(state$ranked %||% data.frame())),
+            type = "message", duration = 8
+          )
+          rank_notified(c(rank_notified(), proj))
+        } else if (identical(st$status, "error") &&
+                     !(proj %in% rank_notified())) {
+          shiny::showNotification(
+            sprintf("Ranking failed for \"%s\": %s",
+                    proj, st$error %||% "(no detail)"),
+            type = "error", duration = 10
+          )
+          rank_notified(c(rank_notified(), proj))
         }
         st
       }
