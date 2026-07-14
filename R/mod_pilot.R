@@ -1,7 +1,6 @@
-# Pilot tab: run the ensemble on a small sample at r=1 and print
-# per-record aggregate score plus per-criterion justifications so the
-# user can see whether the criteria are behaving before triggering a
-# hours-long full ranking.
+# Pilot tab: score a small sample record-by-record in the background,
+# streaming results into the UI as each one lands so the user gets
+# concrete feedback instead of a static "piloting..." message.
 
 #' @keywords internal
 mod_pilot_ui <- function(id) {
@@ -14,21 +13,31 @@ mod_pilot_ui <- function(id) {
       shiny::numericInput(ns("n"), "Sample size (records):",
                           value = 20L, min = 5L, max = 200L, step = 5L),
       shiny::checkboxInput(ns("random"), "Sample at random", value = TRUE),
-      shiny::actionButton(ns("run"), "Run pilot", class = "btn-primary"),
+      shiny::fluidRow(
+        shiny::column(
+          6,
+          shiny::actionButton(ns("run"), "Run pilot",
+                              class = "btn-primary w-100")
+        ),
+        shiny::column(
+          6,
+          shiny::actionButton(ns("cancel"), "Cancel",
+                              class = "btn-outline-danger w-100")
+        )
+      ),
       shiny::hr(),
       shiny::helpText(
         shiny::em(
           "A pilot runs the ensemble at one replicate per model on a small ",
           "sample so you can see what the LLM is doing before committing to ",
-          "the full run. Use it to catch obvious mis-scoring (a criterion ",
-          "the LLM is ignoring, or one that triggers on off-topic records) ",
-          "before you invest hours of compute."
+          "the full run. Results stream in one record at a time; the app ",
+          "stays responsive while it runs."
         )
       )
     ),
     bslib::card(
       bslib::card_header("Pilot results"),
-      shiny::uiOutput(ns("running_banner")),
+      shiny::uiOutput(ns("progress_banner")),
       DT::DTOutput(ns("results_table")),
       shiny::tags$hr(),
       shiny::tags$small(
@@ -43,6 +52,7 @@ mod_pilot_ui <- function(id) {
 #' @keywords internal
 mod_pilot_server <- function(id, state) {
   shiny::moduleServer(id, function(input, output, session) {
+
     output$readiness <- shiny::renderUI({
       needs <- c(
         if (is.null(state$records)) "an uploaded corpus" else NULL,
@@ -60,76 +70,135 @@ mod_pilot_server <- function(id, state) {
       }
     })
 
-    pilot_out <- shiny::reactiveVal(NULL)
-    # Signals to the UI that a pilot is currently running so the user
-    # gets an immediate spinner. `later::later()` defers the blocking
-    # pilot() call by one event-loop tick so Shiny flushes the "running"
-    # UI update to the client before the pilot begins.
-    pilot_running <- shiny::reactiveVal(FALSE)
+    # Handle for the currently running pilot worker (if any), plus a
+    # one-shot flag so the "complete" toast fires exactly once per run.
+    pilot_handle <- shiny::reactiveVal(NULL)
+    completion_fired <- shiny::reactiveVal(FALSE)
 
     shiny::observeEvent(input$run, {
       shiny::req(state$records, state$criteria, state$ensemble)
-      if (isTRUE(pilot_running())) return(NULL)  # ignore double-click
-      pilot_running(TRUE)
-      shiny::showNotification(
-        sprintf("Pilot started (%d records x %d models). The app may pause briefly...",
-                as.integer(input$n), length(state$ensemble$models)),
-        id = "pilot_running_toast", duration = NULL, closeButton = FALSE,
-        type = "message"
+      cur <- pilot_handle()
+      if (!is.null(cur) && cur$handle$is_alive()) {
+        shiny::showNotification("A pilot is already running. Cancel it first.",
+                                type = "warning", duration = 4)
+        return(NULL)
+      }
+      job <- try(
+        start_pilot_job(
+          records  = state$records,
+          criteria = state$criteria,
+          ensemble = state$ensemble,
+          n        = as.integer(input$n),
+          sample   = isTRUE(input$random)
+        ),
+        silent = TRUE
       )
-      # Snapshot the inputs so the deferred call is decoupled from
-      # any reactive re-runs.
-      records  <- state$records
-      criteria <- state$criteria
-      ensemble <- state$ensemble
-      n_val    <- as.integer(input$n)
-      rand_val <- isTRUE(input$random)
-
-      later::later(function() {
-        out <- try(
-          pilot(records, criteria, ensemble = ensemble,
-                n = n_val, sample = rand_val, verbose = FALSE),
-          silent = TRUE
-        )
-        shiny::removeNotification("pilot_running_toast")
-        pilot_running(FALSE)
-        if (inherits(out, "try-error")) {
-          shiny::showNotification(attr(out, "condition")$message,
-                                  type = "error", duration = 8)
-          return(NULL)
-        }
-        pilot_out(out)
-        shiny::showNotification(
-          sprintf("Pilot complete: %d records scored.", nrow(out)),
-          type = "message", duration = 4
-        )
-      }, delay = 0.05)
+      if (inherits(job, "try-error")) {
+        shiny::showNotification(attr(job, "condition")$message,
+                                type = "error", duration = 8)
+        return(NULL)
+      }
+      pilot_handle(job)
+      completion_fired(FALSE)
+      shiny::showNotification(
+        sprintf("Pilot started - scoring %d records in the background.",
+                as.integer(input$n)),
+        duration = 4
+      )
     })
 
-    # Visible banner in the results panel while the pilot is running,
-    # so the user has an immediate signal that their click was received.
-    output$running_banner <- shiny::renderUI({
-      if (!isTRUE(pilot_running())) return(NULL)
+    shiny::observeEvent(input$cancel, {
+      cur <- pilot_handle()
+      if (!is.null(cur)) {
+        pilot_job_cancel(cur$handle)
+        pilot_handle(NULL)
+        shiny::showNotification("Pilot cancelled.", duration = 3)
+      }
+    })
+
+    # Poll the progress file every 500 ms. As soon as a record has been
+    # scored, the reactivePoll fires and the DT below re-renders with
+    # the current partial results.
+    pilot_status <- shiny::reactivePoll(
+      intervalMillis = 500,
+      session = session,
+      checkFunc = function() {
+        path <- pilot_progress_path()
+        if (!fs::file_exists(path)) return(0)
+        file.info(path)$mtime
+      },
+      valueFunc = function() {
+        st <- pilot_job_status()
+        # Fire the completion toast exactly once when the worker
+        # transitions to done/error, so long-lived polls don't spam.
+        if (identical(st$status, "done") && !isTRUE(completion_fired())) {
+          shiny::showNotification(
+            sprintf("Pilot complete: %d records scored.",
+                    length(st$results)),
+            type = "message", duration = 5
+          )
+          completion_fired(TRUE)
+          pilot_handle(NULL)
+        } else if (identical(st$status, "error") &&
+                     !isTRUE(completion_fired())) {
+          shiny::showNotification(
+            sprintf("Pilot failed: %s", st$error %||% "(no detail)"),
+            type = "error", duration = 8
+          )
+          completion_fired(TRUE)
+          pilot_handle(NULL)
+        }
+        st
+      }
+    )
+
+    # Streaming progress banner: shows N of M scored and a spinner
+    # while the worker is active.
+    output$progress_banner <- shiny::renderUI({
+      st <- pilot_status()
+      if (is.null(st) || identical(st$status, "idle")) return(NULL)
+      if (identical(st$status, "done")) {
+        return(shiny::tags$div(
+          class = "alert alert-success py-1 my-2",
+          shiny::tags$small(sprintf(
+            "Pilot complete - %d of %d records scored.",
+            st$processed, st$total
+          ))
+        ))
+      }
+      if (identical(st$status, "error")) {
+        return(shiny::tags$div(
+          class = "alert alert-danger py-1 my-2",
+          shiny::tags$small(sprintf(
+            "Pilot failed: %s", st$error %||% "(no detail)"
+          ))
+        ))
+      }
       shiny::tags$div(
         class = "alert alert-info d-flex align-items-center py-2 my-2",
         shiny::tags$span(class = "spinner-border spinner-border-sm me-2",
                          role = "status"),
         shiny::tags$span(
           shiny::tags$strong("Piloting..."),
-          " scoring records now. This freezes the app for a few seconds ",
-          "(with the light preset) up to a few minutes (with the paper preset)."
+          sprintf(" scored %d of %d records so far (%.0f%%).",
+                  st$processed, st$total, st$percent)
         )
       )
     })
 
-    # Render the pilot output as a sortable DT (score-ordered) so the
-    # user can visually skim the ensemble's decisions. Selecting a row
-    # reveals the raw per-model justifications below the table.
+    # Build the current partial-results tibble from the polled status.
+    # This is what the results DT renders; it grows one row at a time
+    # as the worker appends to the progress file.
+    partial <- shiny::reactive({
+      st <- pilot_status()
+      if (is.null(st) || length(st$results) == 0L) return(NULL)
+      pilot_results_as_tibble(st$results)
+    })
+
     output$results_table <- DT::renderDT({
-      p <- pilot_out()
-      if (is.null(p)) return(NULL)
+      p <- partial()
+      if (is.null(p) || nrow(p) == 0L) return(NULL)
       p <- p[order(-p$universal_best_score), , drop = FALSE]
-      # Preview of the first justification, truncated for the table.
       preview <- vapply(p$justifications, function(js) {
         if (is.null(js) || nrow(js) == 0L) return("")
         m <- js$explanation[nzchar(js$explanation) & !is.na(js$explanation)]
@@ -151,12 +220,10 @@ mod_pilot_server <- function(id, state) {
       )
     })
 
-    # When the user picks a row, print all justifications for that
-    # record verbatim so they can read what each model said.
     output$details <- shiny::renderText({
-      p <- pilot_out()
+      p <- partial()
       sel <- input$results_table_rows_selected
-      if (is.null(p) || is.null(sel) || length(sel) == 0L) {
+      if (is.null(p) || nrow(p) == 0L || is.null(sel) || length(sel) == 0L) {
         return("(select a row above to see per-model justifications)")
       }
       p <- p[order(-p$universal_best_score), , drop = FALSE]
