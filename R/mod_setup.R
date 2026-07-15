@@ -4,41 +4,42 @@
 mod_setup_ui <- function(id) {
   ns <- shiny::NS(id)
   bslib::layout_columns(
-    col_widths = c(4, 8),
-    # ---- LEFT: project (compact) ----------------------------------------
-    bslib::card(
-      bslib::card_header("Project"),
-      bslib::card_body(
-        shiny::selectizeInput(
-          ns("project_select"), NULL,
-          choices = NULL, options = list(placeholder = "(select existing project)")
-        ),
-        shiny::fluidRow(
-          shiny::column(
-            8,
-            shiny::textInput(ns("new_project"), NULL,
-                             placeholder = "or new project name")
-          ),
-          shiny::column(
-            4,
-            shiny::actionButton(ns("create_project"), "Create",
-                                class = "btn-primary w-100")
-          )
-        ),
-        shiny::tags$small(
-          class = "text-muted d-block mt-2",
-          "Data dir: ",
-          shiny::tags$code(shiny::textOutput(ns("data_root_display"),
-                                              inline = TRUE))
-        )
-      )
-    ),
-    # ---- RIGHT: ollama status + pull-any strip, then ensemble --------
+    col_widths = c(6, 6),
+    # ---- LEFT: all the action (project, ollama+pull, ensemble) ----------
     shiny::tags$div(
-      class = "d-flex flex-column gap-2 h-100",
-      # Slim top strip: Ollama status + GPU badge + inline pull-any-model
+      class = "d-flex flex-column gap-2",
+      # Project card
+      bslib::card(
+        bslib::card_header("Project"),
+        bslib::card_body(
+          shiny::selectizeInput(
+            ns("project_select"), NULL,
+            choices = NULL,
+            options = list(placeholder = "(select existing project)")
+          ),
+          shiny::fluidRow(
+            shiny::column(
+              8,
+              shiny::textInput(ns("new_project"), NULL,
+                               placeholder = "or new project name")
+            ),
+            shiny::column(
+              4,
+              shiny::actionButton(ns("create_project"), "Create",
+                                  class = "btn-primary w-100")
+            )
+          ),
+          shiny::tags$small(
+            class = "text-muted d-block mt-2",
+            "Data dir: ",
+            shiny::tags$code(shiny::textOutput(ns("data_root_display"),
+                                                inline = TRUE))
+          )
+        )
+      ),
+      # Slim Ollama + GPU + pull strip
       shiny::tags$div(
-        class = "d-flex align-items-center gap-2 py-1 px-2 border rounded",
+        class = "d-flex align-items-center gap-2 py-1 px-2 border rounded flex-wrap",
         shiny::tags$small(class = "text-nowrap", "Ollama:"),
         shiny::uiOutput(ns("ollama_badge"), inline = TRUE),
         shiny::actionButton(ns("refresh_ollama"), "Refresh",
@@ -53,9 +54,7 @@ mod_setup_ui <- function(id) {
           shiny::selectizeInput(
             ns("pull_tag"), NULL, choices = NULL,
             options = list(
-              # Let the user type any Ollama tag not in the catalog.
-              create = TRUE,
-              createOnBlur = TRUE,
+              create = TRUE, createOnBlur = TRUE,
               placeholder = "pick from list or type any Ollama tag",
               persist = FALSE
             ),
@@ -65,11 +64,9 @@ mod_setup_ui <- function(id) {
         shiny::actionButton(ns("pull_btn"), "Pull",
                             class = "btn-sm btn-outline-primary")
       ),
-      # Any active pull progress banner (rendered by pull_progress_ui)
       shiny::uiOutput(ns("pull_progress_ui")),
-      # Main ensemble card fills all remaining vertical space.
+      # Ensemble card
       bslib::card(
-        class = "flex-grow-1",
         bslib::card_header("Choose ensemble"),
         bslib::card_body(
           shiny::radioButtons(
@@ -82,20 +79,77 @@ mod_setup_ui <- function(id) {
             selected = "default", inline = FALSE
           ),
           shiny::uiOutput(ns("model_list")),
-          # Replicates per model lives on the Rank tab now (it's a
-          # run-time knob, not an ensemble-composition choice).
           shiny::tags$hr(class = "my-2"),
           shiny::fluidRow(
-            shiny::column(
-              6,
-              shiny::uiOutput(ns("pull_missing_ui"))
-            ),
+            shiny::column(6, shiny::uiOutput(ns("pull_missing_ui"))),
             shiny::column(
               6,
               shiny::actionButton(ns("save_ensemble"), "Save ensemble",
                                   class = "btn-success w-100")
             )
           )
+        )
+      )
+    ),
+    # ---- RIGHT: about panel + workflow overview -------------------------
+    bslib::card(
+      bslib::card_header("About screenllm"),
+      bslib::card_body(
+        shiny::tags$p(
+          class = "small mb-2",
+          shiny::tags$strong("screenllm"),
+          " runs a locally-hosted LLM ensemble (via Ollama) over a corpus ",
+          "of paper titles + abstracts to rank them by relevance, and ",
+          "applies the SAFE stopping rule to tell you how many the human ",
+          "reviewer needs to look at. Everything stays on your machine; ",
+          "no API keys, no cloud spend."
+        ),
+        shiny::tags$hr(class = "my-2"),
+        shiny::tags$h6(class = "small text-muted mb-2", "The 7-tab workflow"),
+        shiny::tags$ol(
+          class = "small mb-2",
+          shiny::tags$li(shiny::tags$strong("Setup"), " (this tab): pick a project, verify Ollama + GPU, choose an ensemble."),
+          shiny::tags$li(shiny::tags$strong("Corpus"), ": upload records (CSV, XLSX, or RIS from Zotero / EndNote). Duplicates are flagged automatically."),
+          shiny::tags$li(shiny::tags$strong("Criteria"), ": write the inclusion criteria. Point weights auto-scale."),
+          shiny::tags$li(shiny::tags$strong("Rank"), ": kick off the ensemble scoring. Records stream in as each model completes. Use the sample-size input to preview with a small subset (\"pilot\")."),
+          shiny::tags$li(shiny::tags$strong("Plan"), ": pick the SAFE stopping thresholds. Live plot + per-gate diagnostics show where the run would stop."),
+          shiny::tags$li(shiny::tags$strong("Screen"), ": walk through the ranked records above the stop point, mark Accept / Reject. Per-model LLM justifications visible for context."),
+          shiny::tags$li(shiny::tags$strong("Report"), ": summary, downloads, and a strong LLM-vs-human disagreement audit. Click a disagreement to revisit and flip your decision.")
+        ),
+        shiny::tags$hr(class = "my-2"),
+        shiny::tags$h6(class = "small text-muted mb-2", "Where things live"),
+        shiny::tags$ul(
+          class = "small mb-2",
+          shiny::tags$li("Projects (records, criteria, ensemble, ranking, decisions) persist to the data dir shown top-left; they survive R restarts."),
+          shiny::tags$li("Per-call LLM scores are cached under each project so an interrupted run resumes without re-scoring."),
+          shiny::tags$li("The Rank tab has a ",
+                          shiny::tags$strong("Clear cached scores"),
+                          " control if you need to redo a model.")
+        ),
+        shiny::tags$hr(class = "my-2"),
+        shiny::tags$h6(class = "small text-muted mb-2", "Learn more"),
+        shiny::tags$ul(
+          class = "small mb-2",
+          shiny::tags$li(
+            shiny::tags$a(href = "https://github.com/s-spillias/screenllm",
+                          target = "_blank", "GitHub repo")
+          ),
+          shiny::tags$li(
+            shiny::tags$a(href = "https://github.com/s-spillias/screenllm/blob/main/docs/getting-started.md",
+                          target = "_blank", "Getting-started guide")
+          ),
+          shiny::tags$li(
+            shiny::tags$a(href = "https://github.com/s-spillias/screenllm/blob/main/docs/troubleshooting.md",
+                          target = "_blank", "Troubleshooting")
+          )
+        ),
+        shiny::tags$hr(class = "my-2"),
+        shiny::tags$p(
+          class = "small text-muted mb-0",
+          shiny::tags$strong("Cite:"),
+          " Spillias, S. et al. (2026). ",
+          shiny::tags$em("An open-source LLM-assisted screening workflow for environmental systematic reviews."),
+          " (in submission)."
         )
       )
     )
