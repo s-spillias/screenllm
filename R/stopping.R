@@ -110,6 +110,25 @@ plan_screening <- function(ranked,
   fires <- gate1 & gate2 & gate3
   stop_at <- if (any(fires)) which(fires)[1L] else N
 
+  # Per-gate earliest-fire position for diagnostics. `Inf` means the
+  # gate never fires with the current settings + ranking; the UI can
+  # then show a hint about which slider to move.
+  gate1_at <- if (any(gate1)) which(gate1)[1L] else Inf
+  gate2_at <- if (any(gate2)) which(gate2)[1L] else Inf
+  gate3_at <- if (all(gate3)) 1L
+    else if (any(gate3)) which(gate3)[1L] else Inf
+  # Whichever gate fires latest is what's binding stop_at (the others
+  # are already satisfied earlier). Ties resolve to gate1 arbitrarily.
+  gate_positions <- c(min_coverage = gate1_at,
+                       run_length = gate2_at,
+                       spot_check = gate3_at)
+  finite_positions <- gate_positions[is.finite(gate_positions)]
+  binding <- if (length(finite_positions) == length(gate_positions)) {
+    names(gate_positions)[which.max(gate_positions)]
+  } else {
+    names(gate_positions)[!is.finite(gate_positions)][1]
+  }
+
   to_screen <- ranked[seq_len(stop_at), , drop = FALSE]
 
   plan <- structure(
@@ -117,6 +136,14 @@ plan_screening <- function(ranked,
       stop_at = stop_at,
       N = N,
       expected_workload_pct = 100 * stop_at / N,
+      gates = list(
+        min_coverage = list(position = gate1_at, fires = is.finite(gate1_at)),
+        run_length   = list(position = gate2_at, fires = is.finite(gate2_at)),
+        spot_check   = list(position = gate3_at, fires = is.finite(gate3_at),
+                             evaluated = !is.na(spot_check_gate_target))
+      ),
+      binding_gate = binding,
+      max_negative_streak = max(consecutive_neg, na.rm = TRUE),
       target_recall = target_recall,
       to_screen = to_screen,
       settings = list(

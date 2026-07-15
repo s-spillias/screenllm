@@ -13,29 +13,48 @@ mod_screen_ui <- function(id) {
       DT::DTOutput(ns("records_table"))
     ),
     bslib::card(
-      bslib::card_header(shiny::textOutput(ns("record_title"))),
-      shiny::htmlOutput(ns("record_meta")),
-      shiny::tags$hr(),
-      shiny::tags$h5("Abstract"),
-      shiny::htmlOutput(ns("record_abstract")),
-      shiny::tags$hr(),
-      shiny::tags$h5("LLM justification"),
-      shiny::verbatimTextOutput(ns("record_justification")),
-      shiny::tags$hr(),
-      shiny::fluidRow(
-        shiny::column(4, shiny::actionButton(ns("accept"), "Accept",
-                                              class = "btn-success btn-lg",
-                                              width = "100%")),
-        shiny::column(4, shiny::actionButton(ns("reject"), "Reject",
-                                              class = "btn-danger btn-lg",
-                                              width = "100%")),
-        shiny::column(4, shiny::actionButton(ns("skip"), "Skip",
-                                              class = "btn-secondary btn-lg",
-                                              width = "100%"))
+      # Compact single-record header: title on top, metadata badges +
+      # action buttons on one row underneath. No huge <h5>s, no
+      # verbatim monospace blocks. Everything below fits in one screen
+      # for a laptop viewport.
+      bslib::card_header(
+        shiny::div(
+          shiny::uiOutput(ns("record_header"))
+        )
       ),
-      shiny::tags$br(),
-      shiny::textAreaInput(ns("note"), "Note (optional)", "",
-                            rows = 2, width = "100%")
+      # Metadata + action row.
+      shiny::div(
+        class = "d-flex align-items-center gap-2 flex-wrap mb-2",
+        shiny::uiOutput(ns("record_meta"), inline = TRUE),
+        shiny::div(class = "ms-auto d-flex gap-1",
+          shiny::actionButton(ns("accept"), "Accept",
+                              class = "btn-success", icon = shiny::icon("check")),
+          shiny::actionButton(ns("reject"), "Reject",
+                              class = "btn-danger", icon = shiny::icon("xmark")),
+          shiny::actionButton(ns("skip"), "Skip",
+                              class = "btn-outline-secondary", icon = shiny::icon("forward"))
+        )
+      ),
+      # Two independent scroll regions inside the card body so the
+      # abstract and the justifications can be scanned separately.
+      shiny::div(
+        style = "max-height: 220px; overflow-y: auto; overflow-x: hidden;",
+        shiny::tags$p(
+          class = "small mb-0 text-break text-wrap",
+          shiny::uiOutput(ns("record_abstract"))
+        )
+      ),
+      shiny::tags$hr(class = "my-2"),
+      shiny::tags$small(class = "text-muted",
+                        "Per-model justifications:"),
+      shiny::div(
+        style = "max-height: 260px; overflow-y: auto; overflow-x: hidden;",
+        shiny::uiOutput(ns("record_justification"))
+      ),
+      shiny::tags$hr(class = "my-2"),
+      shiny::textAreaInput(ns("note"), NULL, "",
+                           placeholder = "Optional note about this decision...",
+                           rows = 1, width = "100%")
     )
   )
 }
@@ -83,13 +102,18 @@ mod_screen_server <- function(id, state) {
         ))
       }
       done_ids <- decisions_df()$id
-      v$done <- ifelse(v$id %in% done_ids, "yes", "")
+      v$done <- ifelse(v$id %in% done_ids, "y", "")
       DT::datatable(
         v[, c("row_no", "done", "universal_best_score", "title"), drop = FALSE],
         selection = "single",
-        colnames = c("Rank", "Done", "Score", "Title"),
-        options = list(pageLength = 20, order = list(list(0, "asc"))),
-        rownames = FALSE
+        colnames = c("#", "Done", "Score", "Title"),
+        options = list(
+          dom = "ti", paging = FALSE,
+          scrollY = "560px", scrollCollapse = TRUE,
+          autoWidth = FALSE, scrollX = TRUE,
+          order = list(list(0, "asc"))
+        ),
+        rownames = FALSE, class = "compact"
       )
     })
 
@@ -99,30 +123,63 @@ mod_screen_server <- function(id, state) {
       }
     })
 
-    output$record_title <- shiny::renderText({
+    output$record_header <- shiny::renderUI({
       r <- active()
-      if (is.null(r)) "No records to screen" else r$title
+      if (is.null(r)) {
+        return(shiny::span(class = "text-muted", "No records to screen"))
+      }
+      shiny::tags$strong(r$title)
     })
 
     output$record_meta <- shiny::renderUI({
       r <- active(); if (is.null(r)) return(NULL)
-      shiny::HTML(sprintf(
-        "<b>ID:</b> %s &nbsp; <b>Rank:</b> %d &nbsp; <b>LLM score:</b> %.1f",
-        r$id, r$rank, r$universal_best_score
-      ))
+      shiny::tagList(
+        shiny::tags$span(class = "badge bg-primary",
+                         sprintf("score %.0f", r$universal_best_score)),
+        shiny::tags$span(class = "badge bg-secondary",
+                         sprintf("rank %d", r$rank)),
+        shiny::tags$span(class = "badge bg-light text-dark font-monospace",
+                         r$id)
+      )
     })
 
     output$record_abstract <- shiny::renderUI({
       r <- active(); if (is.null(r)) return(NULL)
-      shiny::HTML(gsub("\n", "<br>", r$abstract %||% "", fixed = TRUE))
+      abstract <- r$abstract %||% ""
+      if (!nzchar(abstract)) {
+        return(shiny::em(class = "text-muted", "(no abstract)"))
+      }
+      shiny::HTML(gsub("\n", "<br>", abstract, fixed = TRUE))
     })
 
-    output$record_justification <- shiny::renderText({
-      r <- active(); if (is.null(r)) return("")
+    output$record_justification <- shiny::renderUI({
+      r <- active(); if (is.null(r)) {
+        return(shiny::em(class = "text-muted small",
+                         "No record selected."))
+      }
       just <- state$ranked$justifications[state$ranked$id == r$id][[1]]
-      if (is.null(just) || nrow(just) == 0L) return("(no justification recorded)")
-      paste(sprintf("[%s r%d] %s", just$model, just$replicate, just$explanation),
-            collapse = "\n\n")
+      if (is.null(just) || nrow(just) == 0L) {
+        return(shiny::em(class = "text-muted small",
+                         "(no justification recorded)"))
+      }
+      # One bordered card per model/replicate, wrapping long text,
+      # matching the Rank tab's per-model panel style.
+      lapply(seq_len(nrow(just)), function(i) {
+        explanation <- just$explanation[i] %||% ""
+        explanation <- gsub("\\s+", " ", explanation)
+        shiny::tags$div(
+          class = "border rounded p-2 mb-2 bg-body-tertiary",
+          shiny::tags$div(
+            class = "d-flex justify-content-between align-items-baseline mb-1",
+            shiny::tags$code(class = "small", just$model[i]),
+            shiny::tags$span(class = "small text-muted",
+                             sprintf("replicate %d", just$replicate[i]))
+          ),
+          shiny::tags$p(class = "mb-0 small text-break text-wrap",
+                        if (nzchar(explanation)) explanation
+                        else shiny::tags$em("(no explanation returned)"))
+        )
+      })
     })
 
     record_decision <- function(decision) {

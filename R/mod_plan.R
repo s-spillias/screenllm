@@ -63,12 +63,32 @@ mod_plan_server <- function(id, state) {
            col = "grey60",
            xlab = "Rank position", ylab = "LLM score (0-100)",
            ylim = c(0, 100))
+      abline(h = 50, col = "grey80", lty = 3)  # "probable accept" cutoff
       if (!is.null(plan)) {
-        abline(v = plan$stop_at, col = "firebrick", lwd = 2, lty = 2)
-        legend("topright", bty = "n",
-               legend = sprintf("Stop at %d (%.1f%% workload)",
-                                plan$stop_at, plan$expected_workload_pct),
-               text.col = "firebrick")
+        # Vertical markers for each gate that has a finite fire
+        # position: min coverage in blue, run length in orange, spot
+        # check (when evaluated) in purple. Stop position in red on
+        # top, dashed.
+        gp <- plan$gates
+        marker <- function(pos, colour, label) {
+          if (!is.finite(pos)) return()
+          abline(v = pos, col = colour, lwd = 1, lty = 3)
+        }
+        marker(gp$min_coverage$position, "steelblue")
+        marker(gp$run_length$position,   "darkorange")
+        if (isTRUE(gp$spot_check$evaluated)) {
+          marker(gp$spot_check$position, "purple")
+        }
+        abline(v = plan$stop_at, col = "firebrick", lwd = 2.5, lty = 2)
+        legend("topright", bty = "n", cex = 0.9,
+               legend = c(
+                 sprintf("stop at %d (%.0f%% workload)",
+                         plan$stop_at, plan$expected_workload_pct),
+                 "min-coverage gate",
+                 "run-length gate"
+               ),
+               col = c("firebrick", "steelblue", "darkorange"),
+               lty = c(2, 3, 3), lwd = c(2.5, 1, 1))
       }
     })
 
@@ -84,11 +104,95 @@ mod_plan_server <- function(id, state) {
         ))
       }
       if (is.null(plan)) return(shiny::em("Waiting for a ranked corpus."))
-      shiny::tags$ul(
-        shiny::tags$li(sprintf("Stop at record %d of %d", plan$stop_at, plan$N)),
-        shiny::tags$li(sprintf("Records to screen: %d", plan$stop_at)),
-        shiny::tags$li(sprintf("Records excluded: %d", plan$N - plan$stop_at)),
-        shiny::tags$li(sprintf("Expected workload: %.1f%%", plan$expected_workload_pct))
+
+      gp <- plan$gates
+      N  <- plan$N
+      # Small helper: pretty per-gate row.
+      gate_row <- function(name, pretty, gate, threshold_desc,
+                            hint_when_missing = NULL) {
+        pos <- gate$position
+        binding <- identical(plan$binding_gate, name)
+        if (is.finite(pos)) {
+          badge <- if (binding) {
+            shiny::tags$span(class = "badge bg-danger ms-1", "binding")
+          } else {
+            shiny::tags$span(class = "badge bg-success ms-1", "OK")
+          }
+          shiny::tags$li(
+            shiny::tags$strong(pretty), ": ",
+            sprintf("fires at record %d", as.integer(pos)),
+            " (", threshold_desc, ")", badge
+          )
+        } else {
+          shiny::tags$li(
+            shiny::tags$strong(pretty), ": ",
+            shiny::tags$span(class = "text-danger",
+                              "never fires with current settings"),
+            if (!is.null(hint_when_missing)) shiny::tagList(
+              shiny::tags$br(),
+              shiny::tags$small(class = "text-muted", hint_when_missing)
+            )
+          )
+        }
+      }
+
+      # Hints tailored to each impossible-to-fire case.
+      run_length_hint <- if (!gp$run_length$fires) {
+        sprintf(
+          "Longest actual negative streak in the ranking is %d. Lower the ",
+          "run-length slider to at most %d for this gate to fire.",
+          plan$max_negative_streak, plan$max_negative_streak
+        ) |> paste(collapse = "")
+      } else NULL
+
+      shiny::tagList(
+        shiny::tags$div(
+          class = if (plan$stop_at == N) "alert alert-warning py-2 my-2"
+                  else "alert alert-success py-2 my-2",
+          if (plan$stop_at == N) {
+            shiny::tagList(
+              shiny::tags$strong("SAFE cannot stop before the end. "),
+              sprintf("You would screen all %d records (100%% workload). ",
+                      N),
+              "See which gate is holding things below."
+            )
+          } else {
+            shiny::tagList(
+              shiny::tags$strong(sprintf("Stop at record %d of %d",
+                                          plan$stop_at, N)),
+              sprintf(" - screen %d, exclude %d (%.0f%% workload).",
+                      plan$stop_at, N - plan$stop_at,
+                      plan$expected_workload_pct)
+            )
+          }
+        ),
+        shiny::tags$ul(
+          class = "list-unstyled small",
+          gate_row("min_coverage", "Gate 1 - min coverage",
+                    gp$min_coverage,
+                    sprintf(">= %d records seen", as.integer(gp$min_coverage$position %||% 1))),
+          gate_row("run_length", "Gate 2 - run length",
+                    gp$run_length,
+                    sprintf(">= %d consecutive rejects",
+                            plan$settings$safe_run_length),
+                    hint_when_missing = run_length_hint),
+          if (isTRUE(gp$spot_check$evaluated)) {
+            gate_row("spot_check", "Gate 3 - spot check",
+                      gp$spot_check, "spot-check accepts >= target")
+          } else {
+            shiny::tags$li(
+              shiny::tags$strong("Gate 3 - spot check"), ": ",
+              shiny::tags$span(class = "text-muted",
+                                "not evaluated (no labelled spot-check records provided)")
+            )
+          }
+        ),
+        shiny::tags$small(
+          class = "text-muted d-block mt-2",
+          "Stop point is the first position where ALL gates fire. ",
+          "The red dashed line on the plot marks the stop; the coloured ",
+          "dotted lines mark each gate's earliest fire position."
+        )
       )
     })
 
