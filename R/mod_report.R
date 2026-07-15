@@ -52,6 +52,7 @@ mod_report_ui <- function(id) {
 #' @keywords internal
 mod_report_server <- function(id, state) {
   shiny::moduleServer(id, function(input, output, session) {
+    ns <- session$ns
     report <- shiny::reactive({
       if (is.null(state$ranked) || is.null(state$decisions)) return(NULL)
       summarise_screening(state$ranked, state$decisions, plan = state$plan)
