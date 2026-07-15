@@ -163,14 +163,27 @@ mod_rank_server <- function(id, state) {
       n_target <- if (isTRUE(as.integer(input$sample_size) > 0L)) {
         min(as.integer(input$sample_size), n_full)
       } else n_full
-      est <- estimate_runtime(n_target, effective_ensemble())
+      # Pull the live GPU / throttled state so the banner reflects
+      # reality (a throttled GPU is CPU-slow).
+      live <- gpu_live()
+      est <- estimate_runtime(
+        n_target, effective_ensemble(),
+        gpu = if (isTRUE(live$available)) TRUE else NULL,
+        throttled = isTRUE(live$throttled)
+      )
       shiny::tags$div(
         class = "alert alert-info py-1 my-1",
         shiny::tags$small(
           shiny::tags$strong("Estimated runtime: "),
           est$human_readable,
-          sprintf(" (%s LLM calls at ~%.0fs each). Rough heuristic; GPUs run several times faster.",
-                  format(est$n_calls, big.mark = ","), est$seconds_per_call)
+          sprintf(" -- %s LLM call%s at ~%.0fs each (assumed hardware: %s). ",
+                  format(est$n_calls, big.mark = ","),
+                  if (est$n_calls == 1L) "" else "s",
+                  est$seconds_per_call, est$hardware),
+          shiny::tags$span(
+            class = "text-muted",
+            "Order-of-magnitude; cached records take no time; a healthy GPU can be several times faster than the heuristic."
+          )
         )
       )
     })
@@ -341,17 +354,46 @@ mod_rank_server <- function(id, state) {
       if (is.null(st) || !identical(st$status, "running")) return(NULL)
       g <- gpu_live()
       if (!isTRUE(g$available) || !isTRUE(g$throttled)) return(NULL)
+      # Render the whole fix inline (visible, selectable). No
+      # tooltip -- the commands need to be copyable.
       shiny::tags$div(
         class = "alert alert-warning py-2 my-2",
-        title = g$hint,
-        `data-bs-toggle` = "tooltip",
-        shiny::tags$strong("GPU throttled. "),
-        sprintf("Graphics clock is %.0f MHz (idle-range) despite %.0f%% utilisation. ",
-                g$graphics_clock_mhz, g$utilisation_pct %||% NA),
-        "This will cost roughly 10x throughput. ",
-        shiny::tags$br(),
-        shiny::tags$small(class = "text-muted",
-                          "Hover for a fix; typically caused by AC/battery state or a power-saver profile.")
+        shiny::tags$div(
+          shiny::tags$strong("GPU throttled. "),
+          sprintf("Graphics clock is %.0f MHz (idle-range) at %.0f%% utilisation, drawing %.0f W. ",
+                  g$graphics_clock_mhz,
+                  g$utilisation_pct %||% NA,
+                  g$power_draw_w %||% NA),
+          "Expect roughly 10x slower throughput than a healthy GPU."
+        ),
+        shiny::tags$hr(class = "my-2"),
+        shiny::tags$small(class = "text-muted d-block mb-1",
+                          "Try, in order:"),
+        shiny::tags$ol(
+          class = "small mb-1 ps-3",
+          shiny::tags$li("Plug in AC power (dGPUs throttle hard on battery)."),
+          shiny::tags$li("Set the OS power profile to Performance (Windows Battery/Power settings, macOS Energy pane, Linux DE power menu)."),
+          shiny::tags$li(
+            "On Linux, enable NVIDIA persistence:",
+            shiny::tags$pre(
+              class = "mb-0 mt-1 p-2 bg-body-tertiary small",
+              style = "user-select: text;",
+              "sudo nvidia-persistenced\nsudo nvidia-smi -pm 1"
+            )
+          ),
+          shiny::tags$li(
+            "Verify with a live query while a call is running:",
+            shiny::tags$pre(
+              class = "mb-0 mt-1 p-2 bg-body-tertiary small",
+              style = "user-select: text;",
+              "nvidia-smi --query-gpu=clocks.current.graphics,power.draw --format=csv"
+            ),
+            shiny::tags$span(
+              class = "text-muted",
+              "Healthy: ~1500-2500 MHz and 40-100 W."
+            )
+          )
+        )
       )
     })
 
@@ -415,7 +457,13 @@ mod_rank_server <- function(id, state) {
         ))
       }
       st <- poll()
-      if (is.null(st) || is.null(st$scores) || nrow(st$scores) == 0L) {
+      # rank_job_status() returns `scores = list()` (empty list, not
+      # a data.frame) when no job has ever run for the project. `nrow`
+      # of a list is NULL, and `NULL == 0L` yields logical(0), which
+      # then aborts the `if` with "missing value where TRUE/FALSE
+      # needed". Test for data.frame-ness explicitly.
+      if (is.null(st) || !is.data.frame(st$scores) ||
+            nrow(st$scores) == 0L) {
         return(NULL)
       }
       # Aggregate provisional scores per record.
