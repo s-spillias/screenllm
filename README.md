@@ -152,7 +152,14 @@ integrated stopping rule. If your use case is different, you may want:
 
 ## Cite
 
-If you use `screenllm` in a review, please cite:
+If you use `screenllm` in a review, please cite the methods paper:
 
-> Spillias, S. et al. (2026). *An open-source LLM-assisted screening
-> workflow for environmental systematic reviews.* (in prep.)
+> Spillias, S., Avila Turriago, L., Brown, C., Easton, A., Roberts, J.,
+> Sievers, M., Swearer, S., Taylor, A., Wright, B., & Komyakova, V.
+> (2026). *Operationalising LLM-assisted screening of literature to
+> support systematic reviews.* Manuscript in submission; preprint
+> forthcoming.
+
+From R, `citation("screenllm")` returns the canonical entry (BibTeX
+via `toBibtex(citation("screenllm"))`). This file is updated when the
+preprint DOI is issued.

@@ -1,0 +1,27 @@
+citHeader(
+  "To cite screenllm in publications, please cite the methods paper. ",
+  "A preprint is forthcoming; update this file with the DOI when it lands."
+)
+
+bibentry(
+  bibtype = "Article",
+  title   = paste("Operationalising LLM-assisted screening of literature",
+                  "to support systematic reviews"),
+  author  = c(
+    person("Scott",     "Spillias", email = "scott.spillias@csiro.au",
+           role = c("aut", "cre")),
+    person("Laura",     "Avila Turriago"),
+    person("Christopher", "Brown"),
+    person("Ariane",    "Easton"),
+    person("Jack",      "Roberts"),
+    person("Michael",   "Sievers"),
+    person("Steve",     "Swearer"),
+    person("Andrew",    "Taylor"),
+    person("Brigette",  "Wright"),
+    person("Valeriya",  "Komyakova")
+  ),
+  year    = 2026,
+  journal = "Manuscript in submission",
+  note    = paste("Preprint forthcoming; software available at",
+                  "https://github.com/s-spillias/screenllm")
+)
