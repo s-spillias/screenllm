@@ -26,8 +26,25 @@ mod_report_ui <- function(id) {
         "opposite. Worth a manual look; on one of the paper's benchmark ",
         "reviews, a similar audit caught legitimate reviewer errors in 28% of these."
       )),
-      DT::DTOutput(ns("audit_table")),
-      shiny::downloadButton(ns("dl_audit"), "Download disagreements.csv")
+      # Wrap DT in a clearfix so its info row doesn't stack over
+      # the review panel below.
+      shiny::div(
+        class = "clearfix",
+        DT::DTOutput(ns("audit_table"))
+      ),
+      shiny::div(
+        class = "d-flex align-items-center gap-2 mt-2",
+        shiny::downloadButton(ns("dl_audit"),
+                               "Download disagreements.csv",
+                               class = "btn-sm btn-outline-secondary"),
+        shiny::tags$small(class = "text-muted ms-2",
+                          "Click a row to review the record and change your decision.")
+      ),
+      shiny::tags$hr(class = "my-2"),
+      shiny::div(
+        style = "max-height: 380px; overflow-y: auto; overflow-x: hidden;",
+        shiny::uiOutput(ns("review_panel"))
+      )
     )
   )
 }
@@ -132,6 +149,135 @@ mod_report_server <- function(id, state) {
         class = "compact"
       )
     })
+
+    # ---- Revisit panel for the disagreements table ----------------
+    # Track the currently-selected disagreement by record id (not by
+    # DT row index) so re-renders don't lose the selection.
+    selected_id <- shiny::reactiveVal(NULL)
+
+    shiny::observeEvent(input$audit_table_rows_selected,
+                        ignoreNULL = FALSE, {
+      sel <- input$audit_table_rows_selected
+      if (length(sel) == 0L) return()
+      a <- shiny::isolate(audit())
+      if (is.null(a) || nrow(a) == 0L) return()
+      if (sel[1L] >= 1L && sel[1L] <= nrow(a)) {
+        selected_id(as.character(a$id[sel[1L]]))
+      }
+    })
+
+    output$review_panel <- shiny::renderUI({
+      sid <- selected_id()
+      if (is.null(sid)) {
+        return(shiny::tags$p(
+          class = "text-muted fst-italic small mt-2",
+          "Select a row above to review this record and (if you want) ",
+          "change your decision."
+        ))
+      }
+      r <- state$ranked
+      if (is.null(r)) return(NULL)
+      idx <- which(r$id == sid)
+      if (length(idx) == 0L) {
+        return(shiny::tags$p(class = "text-muted fst-italic small mt-2",
+                             "(record not found)"))
+      }
+      rec <- r[idx[1L], ]
+      # Current human decision (from state$decisions, not the ranked
+      # ground truth column).
+      current_dec <- {
+        d <- normalise_decisions_shape(state$decisions)
+        val <- d$human_decision[d$id == sid]
+        if (length(val) == 0L || is.na(val[1])) NA_character_ else val[1]
+      }
+      dec_badge <- if (is.na(current_dec)) {
+        shiny::tags$span(class = "badge bg-secondary", "not screened")
+      } else if (current_dec == "Accept") {
+        shiny::tags$span(class = "badge bg-success", "your decision: Accept")
+      } else {
+        shiny::tags$span(class = "badge bg-secondary", "your decision: Reject")
+      }
+      # LLM justifications block, same style as Rank + Screen tabs.
+      just <- rec$justifications[[1L]]
+      panels <- if (is.null(just) || nrow(just) == 0L) {
+        shiny::tags$em(class = "text-muted small",
+                       "(no justifications recorded)")
+      } else {
+        lapply(seq_len(nrow(just)), function(i) {
+          explanation <- gsub("\\s+", " ",
+                              just$explanation[i] %||% "")
+          shiny::tags$div(
+            class = "border rounded p-2 mb-2 bg-body-tertiary",
+            shiny::tags$div(
+              class = "d-flex justify-content-between align-items-baseline mb-1",
+              shiny::tags$code(class = "small", just$model[i]),
+              shiny::tags$span(class = "small text-muted",
+                               sprintf("replicate %d", just$replicate[i]))
+            ),
+            shiny::tags$p(class = "mb-0 small text-break text-wrap",
+                          if (nzchar(explanation)) explanation
+                          else shiny::tags$em("(no explanation)"))
+          )
+        })
+      }
+      # Only offer the "flip" button (the opposite of the current
+      # decision); leave the current-choice button as a no-op
+      # confirm.
+      shiny::tagList(
+        shiny::tags$div(
+          class = "mb-2",
+          shiny::tags$span(class = "badge bg-primary me-2",
+                           sprintf("LLM score %.0f", rec$universal_best_score)),
+          dec_badge,
+          shiny::tags$span(class = "ms-2 fw-semibold small",
+                           substr(rec$title %||% "", 1, 200))
+        ),
+        shiny::tags$p(
+          class = "small text-break text-wrap mb-2",
+          substr(rec$abstract %||% "", 1, 1500),
+          if (nchar(rec$abstract %||% "") > 1500) "..."
+        ),
+        shiny::tags$small(class = "text-muted d-block mb-1",
+                          "Per-model justifications:"),
+        panels,
+        shiny::tags$hr(class = "my-2"),
+        shiny::tags$div(
+          class = "d-flex gap-2 justify-content-end",
+          shiny::actionButton(ns("flip_accept"), "Change to Accept",
+                              class = "btn-success btn-sm",
+                              icon = shiny::icon("check")),
+          shiny::actionButton(ns("flip_reject"), "Change to Reject",
+                              class = "btn-danger btn-sm",
+                              icon = shiny::icon("xmark"))
+        )
+      )
+    })
+
+    # Shared handler: write the new decision to state$decisions and
+    # persist. Reactive graph then re-runs audit; a fixed
+    # disagreement drops out of the table.
+    flip_to <- function(new_decision) {
+      shiny::req(state$project)
+      sid <- selected_id()
+      if (is.null(sid)) return(invisible())
+      d <- normalise_decisions_shape(state$decisions)
+      d <- d[d$id != sid, , drop = FALSE]
+      d <- dplyr::bind_rows(d, data.frame(
+        id = sid, human_decision = new_decision,
+        note = "revised on Report tab",
+        timestamp = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
+        stringsAsFactors = FALSE
+      ))
+      d <- normalise_decisions_shape(d)
+      state$decisions <- d
+      save_artefact(state$project, "decisions", d)
+      shiny::showNotification(
+        sprintf("%s -> %s.", sid, new_decision),
+        type = "message", duration = 4
+      )
+    }
+    shiny::observeEvent(input$flip_accept, flip_to("Accept"))
+    shiny::observeEvent(input$flip_reject, flip_to("Reject"))
 
     output$dl_decisions <- shiny::downloadHandler(
       filename = function() "decisions.csv",
