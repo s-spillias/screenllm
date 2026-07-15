@@ -30,6 +30,41 @@ launch_app <- function(project = NULL, launch_browser = interactive()) {
     ))
   }
 
+  # Running R as root (sudo R, sudo Rscript) breaks X11 authorisation
+  # for launching a browser and reroutes tools::R_user_dir() to
+  # /root/... so any projects saved in the sudo session won't be
+  # findable from the user's normal account. sudo is only needed for
+  # the one-off Ollama install command inside `install_prereqs()`;
+  # never for launch_app() itself. Refuse and explain, so the user
+  # doesn't stare at a cryptic "cannot open display" or "no
+  # authorization" message.
+  if (identical(Sys.info()[["effective_user"]], "root") &&
+        Sys.info()[["sysname"]] != "Windows") {
+    cli::cli_abort(paste0(
+      "R is running as root ({.field sudo R}). This breaks X11 for the ",
+      "browser and reroutes project storage to {.path /root}, so it will ",
+      "fail with confusing errors. ",
+      "Exit sudo ({.code exit}) and run {.code launch_app()} from your ",
+      "normal user account. If you need to install Ollama, call ",
+      "{.code install_prereqs()} from that same normal session -- it will ",
+      "prompt for sudo only for the specific install command."
+    ))
+  }
+
+  # On Linux without DISPLAY (headless, SSH without X11 forwarding),
+  # trying to launch a browser will error. Fall back to just
+  # printing the URL so the user can open it themselves.
+  if (isTRUE(launch_browser) &&
+        identical(Sys.info()[["sysname"]], "Linux") &&
+        !nzchar(Sys.getenv("DISPLAY"))) {
+    cli::cli_alert_info(paste0(
+      "No DISPLAY detected (running headless / over SSH). ",
+      "The app URL will be printed below -- open it in a browser on your ",
+      "local machine (with SSH port forwarding if needed)."
+    ))
+    launch_browser <- FALSE
+  }
+
   ui <- app_ui()
   server <- function(input, output, session) {
     app_server(input, output, session, initial_project = project)

@@ -218,6 +218,39 @@ Ollama gracefully falls back to CPU if a model doesn't fit. Options:
 - Close other GPU-using applications (browsers with hardware
   acceleration, video calls, other ML processes).
 
+## "cannot open display" / "no authorization" when I launch_app()
+
+You're almost certainly running R with `sudo` (either `sudo R`,
+`sudo Rscript`, or invoked from a root shell). Don't do this. `sudo`
+was only ever meant for the one-off Ollama install command inside
+`install_prereqs()`; the R session itself should run as your normal
+user.
+
+Running R as root causes:
+
+- **X11 authorisation failure.** The X server's auth cookie belongs
+  to your normal user; the root session can't attach to your
+  display, so `browseURL()` errors with "cannot open display" or
+  "no authorization is specified".
+- **Wrong project directory.** `tools::R_user_dir()` returns
+  `/root/.local/share/R/screenllm/...` in the sudo session. Any
+  projects you save there won't be findable when you go back to
+  your normal account.
+
+**Fix:**
+
+```
+exit                              # leave the root shell
+R                                 # start R as your normal user
+> library(screenllm)
+> install_prereqs(preset = "light")   # prompts sudo only for the install line
+> launch_app()
+```
+
+`screenllm` now refuses to `launch_app()` from a root session and
+prints this explanation, so you shouldn't hit the raw X11 error
+again.
+
 ## When you're truly stuck
 
 Open a GitHub issue at
