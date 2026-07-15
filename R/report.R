@@ -15,9 +15,10 @@
 #' @export
 summarise_screening <- function(ranked, decisions, plan = NULL) {
   stopifnot(is.data.frame(ranked), is.data.frame(decisions))
-  if (!all(c("id", "human_decision") %in% names(decisions))) {
-    cli::cli_abort("`decisions` must have columns `id` and `human_decision`.")
-  }
+  # Tolerate a legacy decisions file that lost the `human_decision`
+  # column: normalise the shape (add missing columns as NA) instead
+  # of aborting. Downstream code treats NA rows as "not screened".
+  decisions <- normalise_decisions_shape(decisions)
   merged <- ranked |>
     dplyr::left_join(decisions, by = "id") |>
     dplyr::arrange(.data$rank)
@@ -80,6 +81,10 @@ audit_disagreements <- function(ranked, decisions,
                                 strong_fp_score = 70,
                                 strong_fn_score = 30) {
   stopifnot(is.data.frame(ranked), is.data.frame(decisions))
+  # Same defence as summarise_screening: ensure the join produces a
+  # human_decision column even if the caller handed us a legacy
+  # decisions file that lost it.
+  decisions <- normalise_decisions_shape(decisions)
   merged <- ranked |>
     dplyr::left_join(decisions, by = "id") |>
     dplyr::filter(!is.na(.data$human_decision))

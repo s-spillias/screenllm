@@ -136,7 +136,10 @@ mod_setup_server <- function(id, state) {
       state$ensemble  <- load_artefact(proj, "ensemble")
       state$ranked    <- load_artefact(proj, "ranked")
       state$plan      <- load_artefact(proj, "plan")
-      state$decisions <- load_artefact(proj, "decisions")
+      # Normalise the decisions shape at load time so a legacy file
+      # (older schema, missing columns) can't crash downstream tabs.
+      raw_decisions <- load_artefact(proj, "decisions")
+      state$decisions <- normalise_decisions_shape(raw_decisions)
       # Restore the ensemble UI to match what was saved.
       restore_ensemble_ui(state$ensemble)
       if (notify) {

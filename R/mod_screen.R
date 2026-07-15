@@ -78,17 +78,7 @@ mod_screen_server <- function(id, state) {
     # new_row failed and the observer silently swallowed the error,
     # discarding every decision the user made.
     decisions_df <- shiny::reactive({
-      d <- state$decisions
-      if (is.null(d) || nrow(d) == 0L) {
-        return(data.frame(
-          id = character(),
-          human_decision = character(),
-          note = character(),
-          timestamp = character(),
-          stringsAsFactors = FALSE
-        ))
-      }
-      d
+      normalise_decisions_shape(state$decisions)
     })
 
     visible <- shiny::reactive({
@@ -208,6 +198,7 @@ mod_screen_server <- function(id, state) {
       # so any legacy 2-column state$decisions loaded from an older
       # session doesn't wedge new decisions like base rbind did.
       d <- dplyr::bind_rows(d, new_row)
+      d <- normalise_decisions_shape(d)  # canonical schema before save
       state$decisions <- d
       save_artefact(state$project, "decisions", d)
       shiny::updateTextAreaInput(session, "note", value = "")

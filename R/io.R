@@ -274,6 +274,42 @@ read_decisions <- function(path) {
   df
 }
 
+#' Coerce a decisions data.frame to the schema the rest of the
+#' package expects: `id`, `human_decision`, `note`, `timestamp`.
+#'
+#' Any column missing from the input is added as a character NA
+#' vector. Extra columns are preserved. `NULL` or a zero-row input
+#' returns a properly-shaped empty tibble; the caller can `rbind` /
+#' `bind_rows` new rows against it without a column-mismatch error.
+#'
+#' Used at load time (mod_setup rehydration) and at write time
+#' (Screen tab record_decision) so a legacy 1- or 2-column decisions
+#' file on disk gets sanitised on its way through the app rather
+#' than propagating broken shape into downstream tabs.
+#'
+#' @param d A data.frame or NULL.
+#' @return A data.frame with at least the four canonical columns.
+#' @keywords internal
+normalise_decisions_shape <- function(d) {
+  required <- c("id", "human_decision", "note", "timestamp")
+  if (is.null(d)) {
+    return(data.frame(
+      id = character(), human_decision = character(),
+      note = character(), timestamp = character(),
+      stringsAsFactors = FALSE
+    ))
+  }
+  if (!is.data.frame(d)) return(normalise_decisions_shape(NULL))
+  for (col in required) {
+    if (!(col %in% names(d))) {
+      d[[col]] <- rep(NA_character_, nrow(d))
+    } else {
+      d[[col]] <- as.character(d[[col]])
+    }
+  }
+  d
+}
+
 #' @keywords internal
 normalise_decisions <- function(x) {
   x <- trimws(as.character(x))
