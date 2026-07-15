@@ -75,19 +75,23 @@ mod_rank_ui <- function(id) {
     ),
     bslib::card(
       bslib::card_header("Ensemble scores (live)"),
-      # `clearfix` contains DT's floated info/pagination row so the
-      # details panel below doesn't stack over the "Showing X of Y"
-      # text. `pb-4` gives a bit of breathing room.
+      # Two independent scroll regions so scrolling a long
+      # justifications panel doesn't move the ranked table above,
+      # and vice versa. DT's own scrollY handles the top region;
+      # the details panel has an overflow-y wrapper.
       shiny::tags$div(
-        class = "clearfix pb-4",
+        class = "clearfix",
         DT::DTOutput(ns("scores_table"))
       ),
-      shiny::tags$hr(class = "my-3"),
+      shiny::tags$hr(class = "my-2"),
       shiny::tags$small(
         class = "text-muted",
         "Click a row above to see each model's justification for that record."
       ),
-      shiny::uiOutput(ns("details"))
+      shiny::tags$div(
+        style = "max-height: 340px; overflow-y: auto; overflow-x: hidden;",
+        shiny::uiOutput(ns("details"))
+      )
     )
   )
 }
