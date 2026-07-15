@@ -204,9 +204,14 @@ rank_records <- function(records,
     cli::cli_warn(c(
       sprintf("%d of %d LLM calls (%.0f%%) failed and returned NA.",
               n_failed, n_total, 100 * fail_rate),
+      # NB: sprintf takes ONE format string. Concatenate the message
+      # into a single format before passing values, otherwise the
+      # second string is treated as a value and `hint` never appears.
       "i" = sprintf(
-        "This usually means the model isn't installed on Ollama, ",
-        "the daemon is unreachable, or the model returns malformed JSON.%s",
+        paste0(
+          "This usually means the model isn't installed on Ollama, ",
+          "the daemon is unreachable, or the model returns malformed JSON.%s"
+        ),
         hint
       )
     ))

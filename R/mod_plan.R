@@ -137,12 +137,19 @@ mod_plan_server <- function(id, state) {
       }
 
       # Hints tailored to each impossible-to-fire case.
+      # NB: sprintf takes ONE format string then values. Splitting the
+      # message across multiple strings makes each string a separate
+      # format arg -- exactly the bug that landed here before.
       run_length_hint <- if (!gp$run_length$fires) {
         sprintf(
-          "Longest actual negative streak in the ranking is %d. Lower the ",
-          "run-length slider to at most %d for this gate to fire.",
-          plan$max_negative_streak, plan$max_negative_streak
-        ) |> paste(collapse = "")
+          paste0(
+            "Longest actual negative streak in the ranking is %d. ",
+            "Lower the run-length slider to at most %d for this gate ",
+            "to fire."
+          ),
+          as.integer(plan$max_negative_streak),
+          as.integer(plan$max_negative_streak)
+        )
       } else NULL
 
       shiny::tagList(
