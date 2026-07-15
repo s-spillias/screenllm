@@ -45,7 +45,33 @@ mod_rank_ui <- function(id) {
       ),
       shiny::hr(),
       shiny::textOutput(ns("status_line")),
-      shiny::uiOutput(ns("model_progress"))
+      shiny::uiOutput(ns("model_progress")),
+      shiny::hr(),
+      shiny::tags$details(
+        # Housekeeping controls tucked inside <details> so they don't
+        # crowd the main flow; expanded only when needed.
+        shiny::tags$summary(
+          class = "text-muted small",
+          "Clear cached scores (re-run needed)"
+        ),
+        shiny::tags$div(
+          class = "mt-2",
+          shiny::selectizeInput(
+            ns("clear_model"), NULL, choices = NULL,
+            options = list(placeholder = "select a model or 'all'",
+                            create = FALSE)
+          ),
+          shiny::actionButton(ns("clear_cache_btn"),
+                               "Clear + delete ranking",
+                               class = "btn-outline-danger w-100 btn-sm"),
+          shiny::tags$small(
+            class = "text-muted d-block mt-1",
+            "Removes cached LLM scores for the chosen model (or all) ",
+            "AND removes the current ranked artefact so the next ",
+            "Start ranking gets a fresh run."
+          )
+        )
+      )
     ),
     bslib::card(
       bslib::card_header("Ensemble scores (live)"),
@@ -140,6 +166,40 @@ mod_rank_server <- function(id, state) {
         state$rank_handle <- NULL
         shiny::showNotification("Job cancelled.", duration = 3)
       }
+    })
+
+    # Populate the "Clear cache" dropdown with the ensemble's models
+    # plus an "all" option. Refreshed whenever the ensemble changes.
+    shiny::observe({
+      ens <- state$ensemble
+      choices <- if (is.null(ens)) c("all" = "__all__") else
+        c("all models" = "__all__",
+          stats::setNames(ens$models, ens$models))
+      shiny::updateSelectizeInput(session, "clear_model",
+                                    choices = choices, server = FALSE)
+    })
+
+    shiny::observeEvent(input$clear_cache_btn, {
+      shiny::req(state$project)
+      sel <- input$clear_model
+      if (is.null(sel) || !nzchar(sel)) {
+        shiny::showNotification("Pick a model (or 'all models') first.",
+                                type = "warning")
+        return(NULL)
+      }
+      model_arg <- if (identical(sel, "__all__")) NULL else sel
+      removed <- clear_cache(state$project, model = model_arg,
+                              delete_ranked = TRUE)
+      state$ranked <- NULL  # drop the in-memory ranking too
+      # Force the completion-toast bookkeeping to fire again on the
+      # next completed run.
+      rank_notified(setdiff(rank_notified(), state$project))
+      shiny::showNotification(
+        sprintf("Cleared %d cached score%s%s. Click Start ranking to re-run.",
+                removed, if (removed == 1L) "" else "s",
+                if (is.null(model_arg)) "" else sprintf(" for %s", model_arg)),
+        duration = 6, type = "message"
+      )
     })
 
     # Poll the progress file every 500 ms while a job is running, and

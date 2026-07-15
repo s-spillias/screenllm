@@ -139,6 +139,62 @@ delete_artefact <- function(project, artefact = "all") {
   invisible(TRUE)
 }
 
+#' Clear cached LLM scores for a project
+#'
+#' Removes score-cache files under a project's cache directory. Use
+#' this when a model returned garbage during a ranking run and you
+#' want to re-score with fresh calls; the cache would otherwise be
+#' hit on the next `rank_records()` invocation.
+#'
+#' By default clears every cached score (the most conservative
+#' "start over" behaviour). Pass `model = "..."` to clear only that
+#' model's cached scores across all records / replicates. Optionally
+#' also deletes the persisted ranked artefact (`delete_ranked = TRUE`)
+#' so a stale ranking doesn't linger.
+#'
+#' @param project Project name.
+#' @param model Optional Ollama tag. When `NULL` (default), clears
+#'   every cached score in the project. When supplied, only cached
+#'   scores whose stored `$model` field matches are removed. Reading
+#'   each cache file is O(n_files) but each file is tiny (~1 KB).
+#' @param delete_ranked If `TRUE` (default), also removes the
+#'   project's `ranked.rds` artefact so a re-run starts from a
+#'   clean slate.
+#' @return Invisibly, the number of cache files removed.
+#' @export
+#' @examples
+#' \dontrun{
+#' # Clear one model's cached scores after it misbehaved
+#' clear_cache("my-review", model = "mistral:7b")
+#'
+#' # Nuclear option: clear everything for a project
+#' clear_cache("my-review")
+#' }
+clear_cache <- function(project, model = NULL, delete_ranked = TRUE) {
+  cache_dir <- project_cache_dir(project)
+  if (!fs::dir_exists(cache_dir)) return(invisible(0L))
+  files <- fs::dir_ls(cache_dir, glob = "*.rds")
+  removed <- 0L
+  if (is.null(model)) {
+    if (length(files) > 0L) fs::file_delete(files)
+    removed <- length(files)
+  } else {
+    for (f in files) {
+      x <- tryCatch(readRDS(f), error = function(e) NULL)
+      if (!is.null(x) && identical(as.character(x$model), model)) {
+        fs::file_delete(f)
+        removed <- removed + 1L
+      }
+    }
+  }
+  if (isTRUE(delete_ranked)) {
+    ranked_path <- fs::path(project_dir(project, create = FALSE),
+                             .project_artefacts$ranked)
+    if (fs::file_exists(ranked_path)) fs::file_delete(ranked_path)
+  }
+  invisible(removed)
+}
+
 #' Canonical artefact filenames
 #'
 #' Returns the mapping from artefact key to filename used inside every
