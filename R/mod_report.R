@@ -92,11 +92,44 @@ mod_report_server <- function(id, state) {
           options = list(dom = "t"), rownames = FALSE
         ))
       }
+      # Coloured HTML badges for FP vs FN so the eye can pick them
+      # apart at a glance. FP = LLM over-accepts (amber/warning);
+      # FN = LLM under-accepts (red/danger).
+      kind <- ifelse(startsWith(a$disagreement, "Strong FN"), "FN", "FP")
+      badge <- ifelse(
+        kind == "FN",
+        '<span class="badge bg-danger">FN: LLM missed accept</span>',
+        '<span class="badge bg-warning text-dark">FP: LLM over-accepts</span>'
+      )
+      score_badge <- sprintf(
+        '<span class="badge bg-secondary">%.0f</span>',
+        a$universal_best_score
+      )
+      human_badge <- ifelse(
+        a$human_decision == "Accept",
+        '<span class="badge bg-success">Accept</span>',
+        '<span class="badge bg-secondary">Reject</span>'
+      )
+      tbl <- data.frame(
+        kind = badge,
+        score = score_badge,
+        human = human_badge,
+        id = a$id,
+        title = a$title,
+        stringsAsFactors = FALSE
+      )
       DT::datatable(
-        a[, c("id", "universal_best_score", "human_decision", "disagreement",
-              "title"), drop = FALSE],
-        options = list(pageLength = 10, scrollX = TRUE),
-        rownames = FALSE
+        tbl,
+        colnames = c("Type", "LLM score", "Human", "ID", "Title"),
+        escape = FALSE,  # render badge HTML
+        options = list(
+          dom = "ti", paging = FALSE,
+          scrollY = "460px", scrollCollapse = TRUE,
+          autoWidth = FALSE, scrollX = TRUE
+        ),
+        rownames = FALSE,
+        selection = "single",
+        class = "compact"
       )
     })
 
