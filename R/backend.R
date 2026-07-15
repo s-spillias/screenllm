@@ -75,9 +75,23 @@ ollama_score <- function(model, prompt, temperature,
     model = model,
     prompt = prompt,
     stream = FALSE,
-    options = list(temperature = temperature),
-    format = "json"
+    # `think = FALSE` asks reasoning models (gpt-oss, deepseek-r1,
+    # qwen3-thinking) to suppress their chain-of-thought so
+    # `response` contains only the final JSON. Ignored by models
+    # that don't support it -- harmless flag.
+    think = FALSE,
+    options = list(temperature = temperature)
   )
+  # Grammar-constrained JSON (`format = "json"`) makes small
+  # instruction-tuned models produce clean output, but breaks
+  # reasoning-first models: gpt-oss:20b, deepseek-r1's newer
+  # variants, and qwen3 *-thinking* just emit chain-of-thought until
+  # they hit stop tokens, never reaching the JSON. Detect those and
+  # skip the constraint -- we rely on the prompt's schema block +
+  # extract_first_json() to salvage what they return.
+  if (!is_reasoning_model(model)) {
+    body$format <- "json"
+  }
   # `error` is filled in by any failure path (HTTP error, JSON parse
   # error, out-of-range score). Callers can distinguish
   # missing-model / auth failures from an all-timeouts run.
@@ -131,8 +145,21 @@ ollama_score <- function(model, prompt, temperature,
       next
     }
     parsed <- try(jsonlite::fromJSON(body_json$response), silent = TRUE)
+    # Reasoning models sometimes emit chain-of-thought around the
+    # JSON even when format = "json" and think = FALSE are set.
+    # Fall back to grabbing the first balanced-braces JSON object
+    # from the raw text before giving up.
     if (inherits(parsed, "try-error")) {
-      last_error <- "model response was not valid JSON"
+      extracted <- extract_first_json(body_json$response)
+      if (!is.null(extracted)) {
+        parsed <- try(jsonlite::fromJSON(extracted), silent = TRUE)
+      }
+    }
+    if (inherits(parsed, "try-error") || is.null(parsed)) {
+      last_error <- sprintf(
+        "model response was not valid JSON: %s",
+        substr(gsub("\\s+", " ", body_json$response %||% ""), 1, 200)
+      )
       if (attempt >= max_retries) return(na_result(last_error))
       next
     }
@@ -154,3 +181,54 @@ ollama_score <- function(model, prompt, temperature,
 }
 
 `%||%` <- function(a, b) if (is.null(a)) b else a
+
+# Reasoning-first models that misbehave under Ollama's grammar-
+# constrained JSON mode (they emit chain-of-thought until stop tokens
+# and never reach the JSON). Match by prefix so tag suffixes
+# (`:20b`, `:latest`, `:q4_K_M`) don't need enumerating.
+#' @keywords internal
+is_reasoning_model <- function(tag) {
+  if (!is.character(tag) || length(tag) != 1L) return(FALSE)
+  patterns <- c("^gpt-oss", "^deepseek-r1", "^phi4-reasoning",
+                "-thinking", "-reasoning")
+  any(vapply(patterns, function(p) grepl(p, tag), logical(1)))
+}
+
+# Extract the first balanced-braces JSON object substring from `s`.
+# Used as a fallback when a reasoning model returns chain-of-thought
+# text with a JSON blob buried inside, instead of clean JSON only.
+# Returns the substring (character(1)) or NULL if no complete
+# top-level object is found.
+#' @keywords internal
+extract_first_json <- function(s) {
+  if (!is.character(s) || length(s) != 1L || is.na(s) || !nzchar(s)) {
+    return(NULL)
+  }
+  chars <- strsplit(s, "", fixed = TRUE)[[1]]
+  start <- NA_integer_
+  depth <- 0L
+  in_string <- FALSE
+  escape <- FALSE
+  for (i in seq_along(chars)) {
+    ch <- chars[i]
+    if (in_string) {
+      if (escape) { escape <- FALSE; next }
+      if (ch == "\\") { escape <- TRUE; next }
+      if (ch == '"')  { in_string <- FALSE; next }
+      next
+    }
+    if (ch == '"') { in_string <- TRUE; next }
+    if (ch == "{") {
+      if (depth == 0L) start <- i
+      depth <- depth + 1L
+      next
+    }
+    if (ch == "}") {
+      depth <- depth - 1L
+      if (depth == 0L && !is.na(start)) {
+        return(substr(s, start, i))
+      }
+    }
+  }
+  NULL
+}

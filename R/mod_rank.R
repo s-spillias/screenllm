@@ -49,8 +49,14 @@ mod_rank_ui <- function(id) {
     ),
     bslib::card(
       bslib::card_header("Ensemble scores (live)"),
-      DT::DTOutput(ns("scores_table")),
-      shiny::tags$hr(),
+      # `clearfix` contains DT's floated info/pagination row so the
+      # details panel below doesn't stack over the "Showing X of Y"
+      # text. `pb-4` gives a bit of breathing room.
+      shiny::tags$div(
+        class = "clearfix pb-4",
+        DT::DTOutput(ns("scores_table"))
+      ),
+      shiny::tags$hr(class = "my-3"),
       shiny::tags$small(
         class = "text-muted",
         "Click a row above to see each model's justification for that record."
@@ -364,7 +370,17 @@ mod_rank_server <- function(id, state) {
       preselect <- if (!is.null(sid)) which(sc$id == sid) else integer(0)
       DT::datatable(
         tbl,
-        options = list(pageLength = 15, autoWidth = FALSE, scrollX = TRUE),
+        options = list(
+          # Vertical scroll instead of pagination -- easier to scan
+          # a live-updating ranked list than clicking through pages.
+          # `dom = "ti"` = table + "Showing X of Y" footer, no
+          # pagination controls, no length menu, no search.
+          dom = "ti",
+          paging = FALSE,
+          scrollY = "420px",
+          scrollCollapse = TRUE,
+          autoWidth = FALSE, scrollX = TRUE
+        ),
         rownames = FALSE,
         selection = list(mode = "single", selected = preselect),
         class = "compact"
