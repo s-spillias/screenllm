@@ -14,6 +14,19 @@
 launch_app <- function(project = NULL, launch_browser = interactive()) {
   rlang::check_installed(c("shiny", "bslib", "DT"), "to launch the full app.")
 
+  # Friendly heads-up for first-time users who launch before setting
+  # up Ollama. The app itself still opens (Setup tab will show
+  # everything the user needs); this just points them at the
+  # one-liner that automates the install.
+  if (interactive() && !nzchar(Sys.which("ollama"))) {
+    cli::cli_alert_info(
+      "Ollama is not installed on this machine yet. The Setup tab in ",
+      "the app can help, or run {.code install_prereqs(preset = \"light\")} ",
+      "from the R console to install Ollama and pull a laptop-friendly ",
+      "ensemble of models (~10 GB)."
+    )
+  }
+
   ui <- app_ui()
   server <- function(input, output, session) {
     app_server(input, output, session, initial_project = project)

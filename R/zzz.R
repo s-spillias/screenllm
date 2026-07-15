@@ -51,6 +51,9 @@ NULL
 
 .onAttach <- function(libname, pkgname) {
   packageStartupMessage(
-    "screenllm loaded. Run `check_setup()` to verify Ollama and required models."
+    "screenllm loaded.\n",
+    "  * First time?          install_prereqs(preset = \"light\")   # installs Ollama + 4 small models\n",
+    "  * Ready to go:         launch_app()                         # open the browser workflow\n",
+    "  * Diagnose Ollama:     check_setup()"
   )
 }
