@@ -61,6 +61,12 @@ rank_records <- function(records,
   if (length(missing) > 0L) {
     cli::cli_abort("`records` is missing column{?s}: {.val {missing}}")
   }
+  # Belt-and-braces: coerce id to character here as well as in
+  # read_records(). A numeric id column (e.g. from a CSV that used
+  # integer row numbers) would break vapply(character(1)) in the
+  # aggregation step at the very END of a run -- wasting hours of
+  # LLM scoring for a type mismatch.
+  records$id <- as.character(records$id)
 
   if (is.null(cache_dir)) {
     cache_dir <- fs::path(tempdir(), "screenllm-cache")

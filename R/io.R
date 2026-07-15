@@ -34,6 +34,10 @@ read_records <- function(source, id_column = NULL) {
   } else {
     df$id <- as.character(df[[id_column]])
   }
+  # An `id` column that came from the CSV as integer/numeric would
+  # break vapply(character(1)) in rank_records aggregation. Coerce
+  # unconditionally.
+  df$id <- as.character(df$id)
 
   # Reorder so id, title, abstract come first.
   df <- dplyr::relocate(df, dplyr::all_of(c("id", "title", "abstract")))
