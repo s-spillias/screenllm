@@ -106,10 +106,20 @@ rank_records <- function(records,
       ensemble$temperature
     ))
     cache_path <- fs::path(cache_dir, paste0(cache_key, ".rds"))
+    out <- NULL
     if (fs::file_exists(cache_path)) {
-      out <- readRDS(cache_path)
-      cached_hits <- cached_hits + 1L
-    } else {
+      # A cache file left truncated / zero-byte by an interrupted
+      # write (crash, kill, machine restart mid-saveRDS) would abort
+      # readRDS with "error reading from connection". Tolerate it:
+      # drop the bad file and fall through to a fresh score.
+      out <- tryCatch(readRDS(cache_path), error = function(e) NULL)
+      if (is.null(out)) {
+        try(fs::file_delete(cache_path), silent = TRUE)
+      } else {
+        cached_hits <- cached_hits + 1L
+      }
+    }
+    if (is.null(out)) {
       rec <- records[records$id == row$id, ][1, ]
       prompt <- build_prompt(criteria, rec)
       out <- ensemble$backend$score_record(
@@ -120,7 +130,11 @@ rank_records <- function(records,
       out$id <- row$id
       out$model <- row$model
       out$replicate <- row$replicate
-      saveRDS(out, cache_path)
+      # Atomic write: save to a tmp file then rename. If we get
+      # killed between the two lines the real cache_path is
+      # untouched, so the next run will treat this as a cache miss
+      # rather than seeing a truncated file.
+      save_rds_atomic(out, cache_path)
       fresh_hits <- fresh_hits + 1L
     }
     scores[[i]] <- out
@@ -220,3 +234,22 @@ rank_records <- function(records,
 
 #' @importFrom rlang .data
 NULL
+
+# Atomic saveRDS: write to a per-process tmp path then rename over
+# the target. `file.rename` is atomic on the same filesystem, so
+# even if the process is killed between the two calls the target
+# either doesn't exist or contains the last-good snapshot. Prevents
+# the "0-byte cache file after a crash" class of bug that turns up
+# as "error reading from connection" on the next run.
+#' @keywords internal
+save_rds_atomic <- function(x, path) {
+  tmp <- paste0(path, ".tmp-", Sys.getpid())
+  saveRDS(x, tmp)
+  ok <- file.rename(tmp, path)
+  if (!isTRUE(ok)) {
+    # Fallback: rename can fail across filesystems. Copy + delete.
+    file.copy(tmp, path, overwrite = TRUE)
+    unlink(tmp)
+  }
+  invisible(path)
+}
