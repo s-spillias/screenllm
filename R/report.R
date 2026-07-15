@@ -1,3 +1,14 @@
+# Any of these columns on the ranked side would collide with the
+# columns we get from the decisions df during a left_join. Toy CSVs
+# and real user CSVs sometimes carry a baked-in `human_decision`
+# (as ground truth) which is what triggered the .x/.y suffix that
+# broke the Report tab in production.
+#' @keywords internal
+strip_decision_columns <- function(df) {
+  cols <- c("human_decision", "note", "timestamp")
+  df[, setdiff(names(df), cols), drop = FALSE]
+}
+
 #' Summarise a completed screening session
 #'
 #' Combines the LLM ranking with a set of human decisions and reports the
@@ -19,6 +30,11 @@ summarise_screening <- function(ranked, decisions, plan = NULL) {
   # column: normalise the shape (add missing columns as NA) instead
   # of aborting. Downstream code treats NA rows as "not screened".
   decisions <- normalise_decisions_shape(decisions)
+  # The toy CBFM corpus ships with ground-truth decision columns
+  # baked in (as `human_decision`); a real user's CSV might too.
+  # Strip those before the join so we don't end up with .x/.y
+  # suffixes that break the downstream filters.
+  ranked <- strip_decision_columns(ranked)
   merged <- ranked |>
     dplyr::left_join(decisions, by = "id") |>
     dplyr::arrange(.data$rank)
@@ -81,10 +97,11 @@ audit_disagreements <- function(ranked, decisions,
                                 strong_fp_score = 70,
                                 strong_fn_score = 30) {
   stopifnot(is.data.frame(ranked), is.data.frame(decisions))
-  # Same defence as summarise_screening: ensure the join produces a
-  # human_decision column even if the caller handed us a legacy
-  # decisions file that lost it.
+  # Same defence as summarise_screening: normalise the decisions
+  # shape and strip any pre-existing decision columns from the
+  # ranked side so the join doesn't produce .x/.y suffixes.
   decisions <- normalise_decisions_shape(decisions)
+  ranked <- strip_decision_columns(ranked)
   merged <- ranked |>
     dplyr::left_join(decisions, by = "id") |>
     dplyr::filter(!is.na(.data$human_decision))
