@@ -4,7 +4,13 @@
 \alias{estimate_runtime}
 \title{Estimate wall-clock time for a ranking run}
 \usage{
-estimate_runtime(n_records, ensemble, seconds_per_call = NULL, gpu = NULL)
+estimate_runtime(
+  n_records,
+  ensemble,
+  seconds_per_call = NULL,
+  gpu = NULL,
+  throttled = FALSE
+)
 }
 \arguments{
 \item{n_records}{Number of records in the corpus.}
@@ -13,15 +19,22 @@ estimate_runtime(n_records, ensemble, seconds_per_call = NULL, gpu = NULL)
 
 \item{seconds_per_call}{Optional override for the per-call cost.
 When \code{NULL} (the default) a heuristic based on the largest model
-in the ensemble is used, adjusted downward if a GPU is detected.}
+in the ensemble is used, adjusted for GPU / CPU / throttled
+hardware states.}
 
 \item{gpu}{Whether to assume GPU inference. \code{NULL} (the default)
 calls \code{\link[=detect_gpu]{detect_gpu()}} to auto-detect. Pass \code{TRUE} or \code{FALSE} to
 override.}
+
+\item{throttled}{If \code{TRUE}, assume GPU cores are locked at low
+clock speed (see \code{\link[=gpu_status]{gpu_status()}}). Treated as CPU-equivalent for
+throughput. Defaults to \code{FALSE}; the Shiny app passes the live
+\code{\link[=gpu_status]{gpu_status()}} value.}
 }
 \value{
 A \code{screenllm_estimate} object: a list with \code{n_calls},
 \code{seconds_per_call}, \code{seconds_total}, \code{human_readable}, \code{gpu},
+\code{hardware} (a string describing the assumed hardware profile),
 and a \code{caveats} character vector.
 }
 \description{
