@@ -82,11 +82,8 @@ mod_setup_ui <- function(id) {
             selected = "default", inline = FALSE
           ),
           shiny::uiOutput(ns("model_list")),
-          shiny::conditionalPanel(
-            condition = sprintf("input['%s'] == 'custom'", ns("ensemble_mode")),
-            shiny::numericInput(ns("replicates"), "Replicates per model:",
-                                value = 3, min = 1, max = 5, width = "100%")
-          ),
+          # Replicates per model lives on the Rank tab now (it's a
+          # run-time knob, not an ensemble-composition choice).
           shiny::tags$hr(class = "my-2"),
           shiny::fluidRow(
             shiny::column(
@@ -170,8 +167,6 @@ mod_setup_server <- function(id, state) {
           choices = shiny::isolate(ollama_state()$installed),
           selected = ens$models
         )
-        shiny::updateNumericInput(session, "replicates",
-                                   value = ens$replicates)
       }
     }
 
@@ -475,8 +470,9 @@ mod_setup_server <- function(id, state) {
             if (length(models) == 0L) {
               cli::cli_abort("Tick at least one model.")
             }
-            custom_ensemble(models = models,
-                            replicates = as.integer(input$replicates))
+            # Replicates default to 3 here; the Rank tab lets the
+            # user override at run time.
+            custom_ensemble(models = models, replicates = 3L)
           }
         )
       }, error = function(e) {
@@ -512,8 +508,8 @@ mod_setup_server <- function(id, state) {
       state$ensemble <- ens
       save_artefact(state$project, "ensemble", ens)
       shiny::showNotification(
-        sprintf("Ensemble config saved (%d models x %d replicates).",
-                length(ens$models), ens$replicates),
+        sprintf("Ensemble config saved (%d models). Replicates set on the Rank tab.",
+                length(ens$models)),
         duration = 3
       )
     })

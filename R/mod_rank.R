@@ -23,10 +23,23 @@ mod_rank_ui <- function(id) {
       bslib::card_header("Ranking job"),
       shiny::uiOutput(ns("readiness")),
       shiny::uiOutput(ns("estimate_banner")),
-      shiny::numericInput(
-        ns("sample_size"),
-        "Records to score (0 = all)",
-        value = 0L, min = 0L, max = 100000L, step = 5L
+      shiny::fluidRow(
+        shiny::column(
+          6,
+          shiny::numericInput(
+            ns("sample_size"),
+            "Records to score (0 = all)",
+            value = 0L, min = 0L, max = 100000L, step = 5L
+          )
+        ),
+        shiny::column(
+          6,
+          shiny::numericInput(
+            ns("replicates"),
+            "Replicates per model",
+            value = 3L, min = 1L, max = 10L, step = 1L
+          )
+        )
       ),
       shiny::conditionalPanel(
         # Only offer the random-sample toggle when a partial run is
@@ -118,13 +131,38 @@ mod_rank_server <- function(id, state) {
       }
     })
 
+    # Once state$ensemble is loaded, prefill the replicates input
+    # from it so the user sees the ensemble's saved default.
+    shiny::observe({
+      ens <- state$ensemble
+      if (is.null(ens)) return()
+      cur <- shiny::isolate(input$replicates)
+      # Only update when different, so we don't fight the user's
+      # in-flight edits.
+      if (is.null(cur) || is.na(cur) || cur != as.integer(ens$replicates)) {
+        shiny::updateNumericInput(session, "replicates",
+                                    value = as.integer(ens$replicates))
+      }
+    })
+
+    # Compute the effective ensemble (ensemble with the user-chosen
+    # replicates override) for both the estimator and the run.
+    effective_ensemble <- shiny::reactive({
+      ens <- state$ensemble
+      if (is.null(ens)) return(NULL)
+      reps <- as.integer(input$replicates %||% ens$replicates)
+      if (is.na(reps) || reps < 1L) reps <- as.integer(ens$replicates)
+      ens$replicates <- reps
+      ens
+    })
+
     output$estimate_banner <- shiny::renderUI({
-      if (is.null(state$records) || is.null(state$ensemble)) return(NULL)
+      if (is.null(state$records) || is.null(effective_ensemble())) return(NULL)
       n_full <- nrow(state$records)
       n_target <- if (isTRUE(as.integer(input$sample_size) > 0L)) {
         min(as.integer(input$sample_size), n_full)
       } else n_full
-      est <- estimate_runtime(n_target, state$ensemble)
+      est <- estimate_runtime(n_target, effective_ensemble())
       shiny::tags$div(
         class = "alert alert-info py-1 my-1",
         shiny::tags$small(
@@ -141,10 +179,13 @@ mod_rank_server <- function(id, state) {
 
     shiny::observeEvent(input$start, {
       shiny::req(state$project, state$records, state$criteria, state$ensemble)
+      # Pass the ensemble with the Rank-tab replicates override
+      # applied. The persisted ensemble artefact stays unchanged; the
+      # override only affects this run.
       handle <- try(
         start_rank_job(
           state$project,
-          ensemble = state$ensemble,
+          ensemble = effective_ensemble(),
           sample_size = as.integer(input$sample_size),
           random_sample = isTRUE(input$random_sample)
         ),
