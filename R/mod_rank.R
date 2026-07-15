@@ -58,6 +58,7 @@ mod_rank_ui <- function(id) {
       ),
       shiny::hr(),
       shiny::textOutput(ns("status_line")),
+      shiny::uiOutput(ns("gpu_warning")),
       shiny::uiOutput(ns("model_progress")),
       shiny::hr(),
       shiny::tags$details(
@@ -321,6 +322,37 @@ mod_rank_server <- function(id, state) {
       sprintf("%s - %d/%d (%.1f%%)%s%s%s%s",
               toupper(st$status), st$processed, st$total, st$percent,
               elapsed, eta, model, err)
+    })
+
+    # Live GPU throttle detection during a running rank job. Polls
+    # nvidia-smi every 3s while the job is running; shows a warning
+    # banner only when the GPU is loaded but running at idle clocks
+    # (the "on-battery / power-saver" trap that turns a 2s call
+    # into a 30s call).
+    gpu_live <- shiny::reactivePoll(
+      intervalMillis = 3000,
+      session = session,
+      checkFunc = function() Sys.time(),
+      valueFunc = function() gpu_status()
+    )
+
+    output$gpu_warning <- shiny::renderUI({
+      st <- poll()
+      if (is.null(st) || !identical(st$status, "running")) return(NULL)
+      g <- gpu_live()
+      if (!isTRUE(g$available) || !isTRUE(g$throttled)) return(NULL)
+      shiny::tags$div(
+        class = "alert alert-warning py-2 my-2",
+        title = g$hint,
+        `data-bs-toggle` = "tooltip",
+        shiny::tags$strong("GPU throttled. "),
+        sprintf("Graphics clock is %.0f MHz (idle-range) despite %.0f%% utilisation. ",
+                g$graphics_clock_mhz, g$utilisation_pct %||% NA),
+        "This will cost roughly 10x throughput. ",
+        shiny::tags$br(),
+        shiny::tags$small(class = "text-muted",
+                          "Hover for a fix; typically caused by AC/battery state or a power-saver profile.")
+      )
     })
 
     # A tiny per-model progress bar so the user can see model-major

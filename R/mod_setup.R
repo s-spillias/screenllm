@@ -285,10 +285,18 @@ mod_setup_server <- function(id, state) {
       shiny::tags$span(class = sprintf("badge bg-%s", colour), msg)
     })
 
-    # GPU detection is a system-level probe (nvidia-smi / rocm-smi /
-    # Apple Silicon), independent of Ollama. Cached for the session --
-    # the answer does not change while the app is open.
+    # GPU detection: `detect_gpu()` is one-shot (kind of GPU doesn't
+    # change during a session). `gpu_live()` polls nvidia-smi every
+    # 3s so we can catch the "throttled" state where the dGPU is
+    # loaded but running at idle clocks (typically because the
+    # laptop is on battery or in a power-saver profile).
     gpu_info <- shiny::reactive(detect_gpu())
+    gpu_live <- shiny::reactivePoll(
+      intervalMillis = 3000,
+      session = session,
+      checkFunc = function() Sys.time(),
+      valueFunc = function() gpu_status()
+    )
 
     # Populate the Pull selectize with the curated catalog. Already-
     # installed tags are dropped so the user is not encouraged to
@@ -310,11 +318,31 @@ mod_setup_server <- function(id, state) {
 
     output$gpu_badge <- shiny::renderUI({
       g <- gpu_info()
-      colour <- if (isTRUE(g$available)) "success" else "secondary"
-      label <- if (isTRUE(g$available)) g$kind else "none"
+      live <- gpu_live()
+      if (!isTRUE(g$available)) {
+        return(shiny::tags$span(class = "badge bg-secondary",
+                                title = g$detail, "none"))
+      }
+      is_throttled <- isTRUE(live$throttled)
+      colour <- if (is_throttled) "warning text-dark" else "success"
+      # Rich tooltip: kind + live clock + power + hint if throttled.
+      tooltip <- if (isTRUE(live$available)) {
+        base <- sprintf(
+          "%s | clock %.0f MHz | VRAM %.1f/%.1f GB | %.0f W",
+          g$detail,
+          live$graphics_clock_mhz,
+          live$memory_used_mib / 1024,
+          live$memory_total_mib / 1024,
+          live$power_draw_w
+        )
+        if (is_throttled) paste0(base, " -- THROTTLED. ", live$hint) else base
+      } else {
+        g$detail
+      }
       shiny::tags$span(
         class = sprintf("badge bg-%s", colour),
-        title = g$detail, label
+        title = tooltip,
+        if (is_throttled) paste0(g$kind, " (throttled)") else g$kind
       )
     })
 

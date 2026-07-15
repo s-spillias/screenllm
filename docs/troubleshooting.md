@@ -162,6 +162,38 @@ tens of minutes), check the following.
 - Set the `HSA_OVERRIDE_GFX_VERSION` env var if your GPU model
   needs it (check Ollama's ROCm docs).
 
+### GPU is throttled (99 % utilisation but the run is slow)
+
+Symptom: the Setup tab GPU badge turns amber and reads
+"nvidia (throttled)", or a warning banner appears on the Rank tab
+during a running job. Effective throughput drops ~10x (each LLM
+call takes 20-30 s instead of 2-3 s) even though `nvidia-smi`
+reports 99 % utilisation.
+
+Cause: the dGPU is running its cores at idle clock speeds (a few
+hundred MHz instead of ~2 GHz) while it should be under load. On
+laptops this almost always means:
+
+- **On battery power.** Discrete GPUs like the RTX 3500 Ada aggressively throttle when the AC adapter is unplugged.
+- **OS is in a power-saver profile.** Windows "Battery Saver" or "Balanced", macOS "Low Power Mode", Linux `powersave` governor.
+- **Persistence mode is off.** The driver unloads between calls and reloads in a low-power P-state.
+
+Fixes, in order:
+
+1. **Plug in the AC adapter.** Wait ~30 s and re-check the badge.
+2. **Set the OS power profile to Performance** (Windows Settings → Power, macOS Settings → Battery, Linux `cpupower frequency-set -g performance` or your DE's power menu).
+3. **On Linux, enable NVIDIA persistence:**
+   ```sh
+   sudo nvidia-persistenced --user root
+   sudo nvidia-smi -pm 1
+   ```
+4. **Verify with a live query while a call is running:**
+   ```sh
+   nvidia-smi --query-gpu=clocks.current.graphics,power.draw --format=csv
+   ```
+   Under real load a modern dGPU should report `1500-2500 MHz` and `40-100 W`. If it still reads ~200 MHz and ~10 W after the fixes above, check your vendor's power management app (Dell Power Manager, Lenovo Vantage, ThinkPad Power Manager, etc.) for a discrete-GPU cap.
+5. **Some laptops have an Optimus / Prime mode** that keeps the dGPU off entirely. Toggle to "dGPU on" or "Discrete Graphics" via the vendor app or BIOS.
+
 ### Verifying at runtime
 
 While a `screenllm` pilot or ranking is in progress, open a terminal

@@ -74,3 +74,83 @@ detect_gpu <- function() {
   list(available = FALSE, kind = "none",
        detail = "No GPU detected; Ollama will run on CPU.")
 }
+
+#' Live NVIDIA GPU status snapshot
+#'
+#' Queries `nvidia-smi` for current graphics clock, memory clock,
+#' memory used, power draw and utilisation. Used to catch the
+#' "throttled" state where a laptop dGPU reports 99% utilisation but
+#' is running its cores at idle clock speeds (typically because the
+#' laptop is on battery, in a power-saver profile, or persistence
+#' mode is off). In that state throughput drops ~10x and each LLM
+#' call takes 20-30s instead of 2-3s.
+#'
+#' Returns `available = FALSE` on non-NVIDIA systems; the Metal /
+#' ROCm equivalents don't expose live clock data through a portable
+#' CLI.
+#'
+#' @param throttled_clock_mhz Threshold below which the graphics
+#'   clock is considered throttled. Defaults to 800 MHz (a modern
+#'   dGPU under real inference load should be 1500-2500 MHz).
+#' @param loaded_mib Threshold at which VRAM is considered "in use
+#'   by a model" (avoids false-positive throttling at rest, when
+#'   idle clocks are expected and normal). Defaults to 500 MiB.
+#' @return A list with `available`, `graphics_clock_mhz`,
+#'   `memory_clock_mhz`, `memory_used_mib`, `memory_total_mib`,
+#'   `power_draw_w`, `utilisation_pct`, `throttled` (logical), and
+#'   `hint` (short human-readable action if throttled).
+#' @export
+#' @examples
+#' \dontrun{
+#' s <- gpu_status()
+#' if (isTRUE(s$throttled)) message(s$hint)
+#' }
+gpu_status <- function(throttled_clock_mhz = 800,
+                       loaded_mib = 500) {
+  fail <- list(available = FALSE, throttled = NA,
+               graphics_clock_mhz = NA_real_,
+               memory_clock_mhz = NA_real_,
+               memory_used_mib = NA_real_,
+               memory_total_mib = NA_real_,
+               power_draw_w = NA_real_,
+               utilisation_pct = NA_real_,
+               hint = "")
+  if (!nzchar(Sys.which("nvidia-smi"))) return(fail)
+  fields <- c("clocks.current.graphics", "clocks.current.memory",
+              "memory.used", "memory.total",
+              "power.draw", "utilization.gpu")
+  out <- tryCatch(
+    suppressWarnings(system2(
+      "nvidia-smi",
+      c(sprintf("--query-gpu=%s", paste(fields, collapse = ",")),
+        "--format=csv,noheader,nounits"),
+      stdout = TRUE, stderr = FALSE
+    )),
+    error = function(e) NULL
+  )
+  if (is.null(out) || length(out) == 0L || !nzchar(out[1])) return(fail)
+  parts <- strsplit(out[1], ",", fixed = TRUE)[[1]]
+  vals <- suppressWarnings(as.numeric(trimws(parts)))
+  if (length(vals) < 6L || any(is.na(vals[1:4]))) return(fail)
+  loaded <- vals[3] >= loaded_mib
+  throttled <- isTRUE(loaded && vals[1] < throttled_clock_mhz)
+  hint <- if (throttled) {
+    paste(
+      "GPU clock is stuck at low speed while a model is loaded.",
+      "Usually caused by AC/battery state or a power-saver profile.",
+      "Try: (1) plug in AC power, (2) set OS power profile to Performance,",
+      "(3) on Linux, sudo nvidia-persistenced && sudo nvidia-smi -pm 1."
+    )
+  } else ""
+  list(
+    available = TRUE,
+    graphics_clock_mhz = vals[1],
+    memory_clock_mhz = vals[2],
+    memory_used_mib = vals[3],
+    memory_total_mib = vals[4],
+    power_draw_w = vals[5],
+    utilisation_pct = vals[6],
+    throttled = throttled,
+    hint = hint
+  )
+}
