@@ -54,12 +54,37 @@ mod_report_server <- function(id, state) {
       )
     })
 
+    # Same tryCatch pattern used on the Plan tab: never let an
+    # audit_disagreements() error grey out the report or render as
+    # "[object Object]" from Shiny's default error handler.
+    audit_error <- shiny::reactiveVal(NULL)
     audit <- shiny::reactive({
-      if (is.null(state$ranked) || is.null(state$decisions)) return(NULL)
-      audit_disagreements(state$ranked, state$decisions)
+      if (is.null(state$ranked) || is.null(state$decisions) ||
+            nrow(state$decisions) == 0L) {
+        audit_error(NULL)
+        return(NULL)
+      }
+      out <- tryCatch(
+        audit_disagreements(state$ranked, state$decisions),
+        error = function(e) e
+      )
+      if (inherits(out, "error")) {
+        audit_error(conditionMessage(out))
+        return(NULL)
+      }
+      audit_error(NULL)
+      out
     })
 
     output$audit_table <- DT::renderDT({
+      err <- audit_error()
+      if (!is.null(err)) {
+        return(DT::datatable(
+          data.frame(Error = err),
+          options = list(dom = "t"), rownames = FALSE,
+          colnames = "audit_disagreements() failed"
+        ))
+      }
       a <- audit()
       if (is.null(a) || nrow(a) == 0L) {
         return(DT::datatable(

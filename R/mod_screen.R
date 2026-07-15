@@ -72,10 +72,21 @@ mod_screen_server <- function(id, state) {
       df
     })
 
+    # Empty-placeholder must match the schema of the rows we actually
+    # append below (id, human_decision, note, timestamp); previously
+    # it had only two columns, so the very first rbind() with a full
+    # new_row failed and the observer silently swallowed the error,
+    # discarding every decision the user made.
     decisions_df <- shiny::reactive({
       d <- state$decisions
       if (is.null(d) || nrow(d) == 0L) {
-        return(data.frame(id = character(), human_decision = character()))
+        return(data.frame(
+          id = character(),
+          human_decision = character(),
+          note = character(),
+          timestamp = character(),
+          stringsAsFactors = FALSE
+        ))
       }
       d
     })
@@ -186,13 +197,17 @@ mod_screen_server <- function(id, state) {
       shiny::req(state$project)
       r <- active(); if (is.null(r)) return(invisible())
       new_row <- data.frame(
-        id = r$id, human_decision = decision, note = input$note,
+        id = r$id, human_decision = decision,
+        note = input$note %||% "",
         timestamp = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
         stringsAsFactors = FALSE
       )
       d <- decisions_df()
       d <- d[d$id != r$id, , drop = FALSE]
-      d <- rbind(d, new_row)
+      # bind_rows tolerates a column-name mismatch (fills with NA)
+      # so any legacy 2-column state$decisions loaded from an older
+      # session doesn't wedge new decisions like base rbind did.
+      d <- dplyr::bind_rows(d, new_row)
       state$decisions <- d
       save_artefact(state$project, "decisions", d)
       shiny::updateTextAreaInput(session, "note", value = "")
