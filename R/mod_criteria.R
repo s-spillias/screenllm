@@ -60,15 +60,28 @@ mod_criteria_server <- function(id, state) {
       ))
     }
 
-    # Rehydrate the form from a saved criteria object only when the
-    # active project changes. Triggering on `state$criteria` directly
-    # would fire every time autosave writes back to the same object,
-    # calling updateTextAreaInput and jumping the cursor mid-type.
-    # Guarding by project + a "the form already matches" check breaks
-    # that feedback loop while still restoring on project switch.
+    # Rehydrate the form when the active project changes. Triggering
+    # on `state$criteria` directly would fire every time autosave
+    # writes back to the same object, calling updateTextAreaInput
+    # and jumping the cursor mid-type. Guarding by project + a
+    # "the form already matches" check breaks that feedback loop
+    # while still restoring on project switch. When the new project
+    # has NO saved criteria, we must reset the form to blank -- doing
+    # nothing (the old behaviour) left the previous project's values
+    # visible on a fresh new project.
     shiny::observeEvent(state$project, ignoreNULL = TRUE, {
       c <- state$criteria
-      if (is.null(c)) return(NULL)
+      if (is.null(c)) {
+        # Blank the form: scope empty, four empty criterion textareas.
+        shiny::updateTextAreaInput(session, "scope", value = "")
+        n_criteria(4L)
+        stored_values(rep("", 4L))
+        for (i in seq_len(4L)) {
+          shiny::updateTextAreaInput(session, sprintf("inc_%d", i),
+                                      value = "")
+        }
+        return(NULL)
+      }
       current_scope <- shiny::isolate(input$scope %||% "")
       current_texts <- shiny::isolate(read_inputs(n_criteria(), isolate = TRUE))
       current_texts <- trimws(current_texts)

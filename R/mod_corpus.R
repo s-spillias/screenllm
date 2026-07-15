@@ -9,12 +9,16 @@ mod_corpus_ui <- function(id) {
       bslib::card_header("Upload"),
       shiny::uiOutput(ns("project_hint")),
       shiny::fileInput(
-        ns("file"), "Corpus (CSV or XLSX):",
-        accept = c(".csv", ".tsv", ".xlsx", ".xls")
+        ns("file"), "Corpus (CSV, TSV, XLSX, or RIS):",
+        accept = c(".csv", ".tsv", ".xlsx", ".xls", ".ris", ".txt")
       ),
       shiny::helpText(
-        "Column names from Scopus / Web of Science / EndNote / Zotero are auto-normalised. ",
-        "At minimum, the file needs `title` and `abstract` columns."
+        "Accepts CSV, TSV, Excel, and RIS exports from Zotero, EndNote, ",
+        "Mendeley, or Web of Science. Column names from Scopus / WoS / ",
+        "EndNote / Zotero are auto-normalised. At minimum the file needs ",
+        shiny::tags$code("title"), " and ", shiny::tags$code("abstract"),
+        " columns (or the RIS equivalents ", shiny::tags$code("TI"),
+        " / ", shiny::tags$code("AB"), ")."
       ),
       shiny::hr(),
       shiny::actionButton(ns("use_toy"), "Or load the toy CBFM corpus",
