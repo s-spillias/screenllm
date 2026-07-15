@@ -11,8 +11,13 @@ test_that("clear_cache removes only the requested model's cached scores", {
     fs::dir_create(cache_dir, recurse = TRUE)
 
     # Write a handful of fake cache files: 3 for mistral, 2 for gemma.
+    # The filename must not contain ':' -- on Windows that character is
+    # reserved and saveRDS writes into an NTFS alternate data stream,
+    # so `fs::dir_ls` finds 0 files and the assertions below fail.
+    # Real cache files in production use digest hashes (alphanumeric),
+    # so production is unaffected; this only bit the test.
     writer <- function(model, id, replicate) {
-      key <- paste(model, id, replicate, sep = "-")
+      key <- digest::digest(list(model, id, replicate))
       saveRDS(list(model = model, id = id, replicate = replicate,
                     score = 42, explanation = "why"),
               fs::path(cache_dir, paste0(key, ".rds")))
