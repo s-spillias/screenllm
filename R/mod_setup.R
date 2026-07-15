@@ -37,13 +37,14 @@ mod_setup_ui <- function(id) {
           )
         )
       ),
-      # Slim Ollama + GPU + pull strip
+      # Slim Ollama + GPU + pull strip. The action button toggles
+      # between "Install Ollama" (when nothing responds at the API)
+      # and "Refresh" (when Ollama is up).
       shiny::tags$div(
         class = "d-flex align-items-center gap-2 py-1 px-2 border rounded flex-wrap",
         shiny::tags$small(class = "text-nowrap", "Ollama:"),
         shiny::uiOutput(ns("ollama_badge"), inline = TRUE),
-        shiny::actionButton(ns("refresh_ollama"), "Refresh",
-                            class = "btn-sm btn-outline-secondary"),
+        shiny::uiOutput(ns("ollama_action_btn"), inline = TRUE),
         shiny::tags$div(class = "vr mx-2"),
         shiny::tags$small(class = "text-nowrap", "GPU:"),
         shiny::uiOutput(ns("gpu_badge"), inline = TRUE),
@@ -283,6 +284,137 @@ mod_setup_server <- function(id, state) {
       colour <- if (isTRUE(s$up)) "success" else "danger"
       msg <- if (isTRUE(s$up)) "reachable" else "not reachable"
       shiny::tags$span(class = sprintf("badge bg-%s", colour), msg)
+    })
+
+    # The action button next to the Ollama badge is either "Refresh"
+    # (when Ollama is up) or "Install Ollama" (when the API is not
+    # reachable AND the ollama binary isn't on PATH -- meaning it's
+    # actually not installed rather than just not running).
+    output$ollama_action_btn <- shiny::renderUI({
+      s <- ollama_state()
+      have_binary <- nzchar(Sys.which("ollama"))
+      if (isTRUE(s$up) || have_binary) {
+        shiny::actionButton(ns("refresh_ollama"), "Refresh",
+                            class = "btn-sm btn-outline-secondary")
+      } else {
+        shiny::actionButton(ns("install_ollama_btn"), "Install Ollama",
+                            class = "btn-sm btn-primary",
+                            icon = shiny::icon("download"))
+      }
+    })
+
+    # Clicking Install Ollama opens a modal with OS-specific
+    # guidance. We show the copy-pasteable command every time (works
+    # everywhere) and, on macOS/Windows where the command doesn't
+    # need a TTY-attached sudo, also offer a "Run it now" button.
+    shiny::observeEvent(input$install_ollama_btn, {
+      candidate <- ollama_install_candidate()
+      sysname <- Sys.info()[["sysname"]]
+      cmd <- candidate$command %||% "curl -fsSL https://ollama.com/install.sh | sh"
+      manager <- candidate$manager %||% "manual"
+      # On Linux, the install script uses sudo internally and needs a
+      # TTY password prompt, which a Shiny modal can't provide. Show
+      # copy-paste only there. macOS brew and Windows winget usually
+      # don't need password input in this flow, so offer the button
+      # too.
+      can_run_directly <- !is.null(candidate) && sysname != "Linux"
+      shiny::showModal(shiny::modalDialog(
+        title = "Install Ollama",
+        shiny::tags$p(
+          "screenllm runs its language models through ",
+          shiny::tags$a(href = "https://ollama.com", target = "_blank", "Ollama"),
+          ", a small local server. Once installed you'll come back here ",
+          "to pull models and choose an ensemble."
+        ),
+        shiny::tags$hr(),
+        shiny::tags$p(
+          shiny::tags$strong(sprintf("Detected: %s (%s).", sysname, manager)),
+          " Copy the command below into a terminal and run it, or click ",
+          "\"Try direct install\" if available."
+        ),
+        shiny::tags$pre(
+          class = "p-2 bg-body-tertiary small",
+          style = "user-select: text;",
+          cmd
+        ),
+        if (sysname == "Linux") shiny::tags$small(
+          class = "text-muted",
+          "Linux install writes to /usr/local/bin and needs sudo; run it in a terminal so it can prompt for your password. When it finishes, come back here and click Refresh."
+        ),
+        shiny::tags$hr(),
+        shiny::tags$p(
+          shiny::tags$strong("Or install manually: "),
+          shiny::tags$a(href = "https://ollama.com/download",
+                        target = "_blank", "ollama.com/download")
+        ),
+        footer = shiny::tagList(
+          if (can_run_directly)
+            shiny::actionButton(ns("install_run_now"), "Try direct install",
+                                class = "btn-primary",
+                                icon = shiny::icon("play")),
+          shiny::actionButton(ns("install_close"),
+                              "Close (I'll install it in a terminal)",
+                              class = "btn-outline-secondary")
+        ),
+        easyClose = TRUE, size = "l"
+      ))
+    })
+
+    shiny::observeEvent(input$install_close, {
+      shiny::removeModal()
+      # Immediate refresh so if the user just installed it, we
+      # pick it up.
+      ollama_refresh(shiny::isolate(ollama_refresh()) + 1L)
+    })
+
+    # Direct-install path (macOS brew / Windows winget). Run the
+    # command in a background process so the app stays responsive,
+    # then trigger a Refresh once it exits.
+    install_handle <- shiny::reactiveVal(NULL)
+    shiny::observeEvent(input$install_run_now, {
+      candidate <- ollama_install_candidate()
+      if (is.null(candidate)) {
+        shiny::showNotification(
+          "No supported package manager detected on this OS.",
+          type = "warning"
+        )
+        return()
+      }
+      shiny::removeModal()
+      shiny::showNotification(
+        paste0("Running: ", candidate$command,
+               ".  This can take a few minutes; the app will refresh when it's done."),
+        duration = 8
+      )
+      rlang::check_installed("callr", "to run the install in the background.")
+      handle <- callr::r_bg(
+        func = function(cmd) system(cmd),
+        args = list(cmd = candidate$command),
+        supervise = FALSE
+      )
+      install_handle(handle)
+    })
+
+    # Poll the background install every 2s. When it finishes, bump
+    # ollama_refresh and tell the user.
+    shiny::observe({
+      h <- install_handle()
+      if (is.null(h)) return()
+      shiny::invalidateLater(2000, session)
+      if (!h$is_alive()) {
+        exit <- tryCatch(h$get_exit_status(), error = function(e) NA_integer_)
+        if (identical(exit, 0L)) {
+          shiny::showNotification("Ollama install finished.", duration = 5)
+        } else {
+          shiny::showNotification(
+            sprintf("Install exited with status %s. Try running the command in a terminal.",
+                    exit %||% "?"),
+            type = "warning", duration = 10
+          )
+        }
+        install_handle(NULL)
+        ollama_refresh(shiny::isolate(ollama_refresh()) + 1L)
+      }
     })
 
     # GPU detection: `detect_gpu()` is one-shot (kind of GPU doesn't
