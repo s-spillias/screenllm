@@ -1,0 +1,173 @@
+---
+title: "Using proprietary API backends (OpenAI, Anthropic, Gemini, OpenRouter)"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Using proprietary API backends (OpenAI, Anthropic, Gemini, OpenRouter)}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+`screenllm` was designed around a locally-served Ollama ensemble, but
+the backend interface is small enough that other providers slot in
+cleanly. This vignette shows how to use OpenAI, Anthropic Claude,
+Google Gemini, and OpenRouter, either on their own or mixed into an
+ensemble alongside local Ollama models.
+
+None of the chunks below run at package-build time (they require
+live API keys). Copy them into your R console after setting the
+relevant environment variables.
+
+## Store your API keys
+
+Put your keys in `~/.Renviron` so they aren't committed with your
+code and aren't visible in `history`. Restart R after editing:
+
+```
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GOOGLE_API_KEY=AIzaSy...
+OPENROUTER_API_KEY=sk-or-...
+```
+
+Then in R:
+
+```{r}
+library(screenllm)
+
+# Each backend reads its key from the corresponding env var by default.
+ok  <- backend_openai()
+cl  <- backend_anthropic()
+gm  <- backend_gemini()
+orb <- backend_openrouter(x_title = "screenllm")
+```
+
+## Single-provider ensemble
+
+Any backend plugs into `custom_ensemble()`. Model tags follow each
+provider's own naming:
+
+```{r}
+gpt_ensemble <- custom_ensemble(
+  models = c("gpt-5", "gpt-4o"),
+  replicates = 1L,
+  backend = backend_openai()
+)
+
+claude_ensemble <- custom_ensemble(
+  models = "claude-sonnet-5",
+  replicates = 3L,
+  backend = backend_anthropic()
+)
+
+gemini_ensemble <- custom_ensemble(
+  models = "gemini-2.5-flash",
+  replicates = 1L,
+  backend = backend_gemini()
+)
+```
+
+Then `rank_records()` uses the ensemble like any other:
+
+```{r}
+records <- read_records("my_corpus.csv")
+criteria <- define_criteria(
+  scope = "Field-based coral reef restoration",
+  inclusions = c("Study is field-based.",
+                 "Study describes an intervention.")
+)
+ranked <- rank_records(records, criteria, ensemble = gpt_ensemble)
+```
+
+## OpenRouter: one key, many models
+
+OpenRouter proxies hundreds of models behind an OpenAI-compatible
+API, so you can hit a mixed set with a single key and pay one bill.
+Model tags are `provider/name`:
+
+```{r}
+mixed <- custom_ensemble(
+  models = c(
+    "openai/gpt-5",
+    "anthropic/claude-sonnet-5",
+    "google/gemini-2.5-flash",
+    "meta-llama/llama-3.1-70b-instruct"
+  ),
+  replicates = 1L,
+  backend = backend_openrouter(x_title = "screenllm")
+)
+```
+
+The full model catalogue is at <https://openrouter.ai/models>.
+
+## Mixing local Ollama + cloud APIs
+
+The ensemble diversity thesis in Spillias et al. (2026) says that
+averaging over *different* models beats averaging replicates of the
+*same* model. That works across providers too. A cheap way to add
+a cloud model to a mostly-local ensemble is to run two ensembles in
+succession over the same corpus and average their per-record scores
+manually, or to use OpenRouter as one of two backends:
+
+```{r}
+local_ensemble <- default_ensemble_light()   # 4 x Ollama, ~10 GB
+cloud_ensemble <- custom_ensemble(
+  models = "openai/gpt-5",
+  replicates = 1L,
+  backend = backend_openrouter()
+)
+
+# Two passes; cache_dir shared so each ensemble only scores its own calls.
+ranked_local <- rank_records(records, criteria, ensemble = local_ensemble,
+                              cache_dir = "cache/")
+ranked_cloud <- rank_records(records, criteria, ensemble = cloud_ensemble,
+                              cache_dir = "cache/")
+
+# Combine per-record scores.
+combined <- merge(
+  ranked_local[, c("id", "universal_best_score")],
+  ranked_cloud[, c("id", "universal_best_score")],
+  by = "id", suffixes = c(".local", ".cloud")
+)
+combined$universal_best_score <- rowMeans(
+  combined[, c("universal_best_score.local", "universal_best_score.cloud")],
+  na.rm = TRUE
+)
+```
+
+A first-class "mixed backend" ensemble is on the roadmap; for now,
+this two-pass pattern gives you the same result.
+
+## Cost planning
+
+The paid backends are billed per-token. Rough per-call cost for the
+screening prompt (~500 input tokens + ~200 output tokens) at
+2026-Q3 prices:
+
+| Model                       | Approx. cost / call |
+|-----------------------------|---------------------|
+| gpt-5                       | $0.005              |
+| gpt-4o-mini                 | $0.0002             |
+| claude-sonnet-5             | $0.007              |
+| claude-haiku-4-5            | $0.0008             |
+| gemini-2.5-flash            | $0.0004             |
+| gemini-2.5-pro              | $0.005              |
+
+A 1000-record corpus screened with a 4-model ensemble at 3 replicates
+is 12000 calls, so `gpt-5` would cost ~$60; `gemini-2.5-flash` would
+cost ~$5. Check each provider's current pricing before running a big
+job.
+
+## Troubleshooting
+
+- **`No API key for OpenAI`**: the corresponding env var isn't set.
+  Restart R after editing `~/.Renviron`.
+- **`HTTP 401`**: bad key. Regenerate from the provider dashboard.
+- **`HTTP 429`**: rate-limited. Wait, or set fewer replicates.
+  Rate-limit-aware batching is on the roadmap.
+- **`relevance field missing or out of range`**: the model returned
+  something other than the expected JSON schema. Retry; if it
+  persists, try a bigger model.
