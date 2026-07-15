@@ -19,12 +19,15 @@ launch_app <- function(project = NULL, launch_browser = interactive()) {
   # everything the user needs); this just points them at the
   # one-liner that automates the install.
   if (interactive() && !nzchar(Sys.which("ollama"))) {
-    cli::cli_alert_info(
+    # `cli_alert_info` takes a single `text` argument (positional
+    # extras land in `id`, `class`, `wrap` and crash with "argument
+    # is not interpretable as logical"). Build one string first.
+    cli::cli_alert_info(paste0(
       "Ollama is not installed on this machine yet. The Setup tab in ",
       "the app can help, or run {.code install_prereqs(preset = \"light\")} ",
       "from the R console to install Ollama and pull a laptop-friendly ",
       "ensemble of models (~10 GB)."
-    )
+    ))
   }
 
   ui <- app_ui()
