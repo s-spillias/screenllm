@@ -100,11 +100,23 @@ ollama_installed_models <- function(
   resp <- try(
     httr2::request(paste0(ollama_url, "/api/tags")) |>
       httr2::req_timeout(5) |>
+      httr2::req_error(is_error = function(r) FALSE) |>
       httr2::req_perform(),
     silent = TRUE
   )
   if (inherits(resp, "try-error")) return(character())
-  body <- httr2::resp_body_json(resp, simplifyVector = TRUE)
+  # A captive portal / corporate proxy intercepting localhost can
+  # return an HTML sign-in page with status 200. resp_body_json()
+  # would throw "parse error: premature EOF" and crash the whole
+  # Setup tab. Also treat any 4xx/5xx as "not reachable" -- the
+  # daemon is either not up (503 during boot) or the endpoint has
+  # changed (404 on very old Ollama versions).
+  if (httr2::resp_status(resp) >= 400L) return(character())
+  body <- tryCatch(
+    httr2::resp_body_json(resp, simplifyVector = TRUE),
+    error = function(e) NULL
+  )
+  if (is.null(body)) return(character())
   mods <- body$models
   # A fresh Ollama install with zero models pulled returns
   # {"models": []}, which simplifyVector parses to an empty list().

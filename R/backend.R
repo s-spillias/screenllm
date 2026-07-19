@@ -17,8 +17,16 @@
 #' @return A backend object.
 #' @export
 backend_ollama <- function(ollama_url = getOption("screenllm.ollama_url"),
-                           timeout = 300,
+                           timeout = 600,
                            max_retries = 3L) {
+  # Bumped from 300s to 600s in 0.1.1: on a laptop with a 5400rpm
+  # disk (or an over-committed NFS mount), Ollama can take 5-8
+  # minutes to load a 24 GB model on the first `/api/generate`
+  # call. The old 300s cap silently NA'd the first 3-4 records
+  # of the corpus, then everything after was fine -- users saw
+  # a "front of corpus under-scored" pattern that was very hard
+  # to diagnose. 600s gives ample slack; subsequent calls resolve
+  # in seconds.
   structure(
     list(
       name = "ollama",

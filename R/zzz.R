@@ -35,11 +35,28 @@ NULL
 
 .onLoad <- function(libname, pkgname) {
   op <- options()
+  # Ollama's own CLI honours OLLAMA_HOST, and every Ollama tutorial
+  # tells users to set it when running on a non-default port or a
+  # remote host. Read it as a fallback so `screenllm` doesn't refuse
+  # to connect to a daemon the ollama CLI can see happily. The value
+  # is a host[:port] (no scheme); prepend http:// if bare.
+  resolve_ollama_url <- function() {
+    explicit <- Sys.getenv("SCREENLLM_OLLAMA_URL", unset = "")
+    if (nzchar(explicit)) return(explicit)
+    host <- Sys.getenv("OLLAMA_HOST", unset = "")
+    if (!nzchar(host)) return(.DEFAULT_OLLAMA_URL)
+    if (grepl("^https?://", host)) return(host)
+    # Ollama's "listen everywhere" bind values (0.0.0.0, ::, [::])
+    # should be rewritten to localhost for the client's benefit
+    # BEFORE port normalisation, so a bare "::" becomes
+    # "localhost:11434" not "localhost:" (empty port).
+    host <- sub("^0\\.0\\.0\\.0", "localhost", host)
+    host <- sub("^\\[?::\\]?", "localhost", host)
+    if (!grepl(":", host, fixed = TRUE)) host <- paste0(host, ":11434")
+    paste0("http://", host)
+  }
   defaults <- list(
-    screenllm.ollama_url = Sys.getenv(
-      "SCREENLLM_OLLAMA_URL",
-      unset = .DEFAULT_OLLAMA_URL
-    ),
+    screenllm.ollama_url = resolve_ollama_url(),
     screenllm.cache_dir = NULL,
     screenllm.verbose = TRUE,
     screenllm.max_workers = 1L

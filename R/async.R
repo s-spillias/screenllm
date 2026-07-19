@@ -168,12 +168,35 @@ rank_job_cancel <- function(handle) {
 #' @keywords internal
 rank_worker_body <- function(records_path, project, cache_dir, progress_path,
                              ranked_path, libpaths) {
-  .libPaths(libpaths)
-  library(screenllm)
-
-  records  <- readRDS(records_path)
-  criteria <- load_artefact(project, "criteria")
-  ensemble <- load_artefact(project, "ensemble")
+  # Bootstrap error handler: nothing between here and the definition
+  # of write_state() below writes to the progress file, so any early
+  # failure (library() fails after an R upgrade, readRDS chokes on
+  # a partial file, load_artefact() bombs on a corrupt project) used
+  # to leave the UI stuck at "starting" forever. Write a minimal
+  # error record directly so the user can see what went wrong.
+  bootstrap_fail <- function(e) {
+    try(saveRDS(list(
+      status = "error",
+      processed = 0L,
+      total = NA_integer_,
+      error = paste0("Worker startup failed: ", conditionMessage(e)),
+      started_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z")
+    ), progress_path), silent = TRUE)
+    stop(e)
+  }
+  init <- tryCatch({
+    .libPaths(libpaths)
+    library(screenllm)
+    list(
+      records  = readRDS(records_path),
+      criteria = load_artefact(project, "criteria"),
+      ensemble = load_artefact(project, "ensemble")
+    )
+  }, error = bootstrap_fail)
+  records  <- init$records
+  criteria <- init$criteria
+  ensemble <- init$ensemble
+  rm(init)
 
   n_records  <- nrow(records)
   n_models   <- length(ensemble$models)

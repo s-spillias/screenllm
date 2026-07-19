@@ -102,8 +102,22 @@ pull_job_cancel <- function(handle) {
 # Worker body (runs in a separate R process).
 #' @keywords internal
 pull_worker_body <- function(model, ollama_url, progress_path, libpaths) {
-  .libPaths(libpaths)
-  library(screenllm)
+  # Bootstrap error handler: if .libPaths / library() fails (user
+  # upgraded R mid-session so the child picks up a libpath where the
+  # package isn't installed), write an error to the progress file so
+  # the Shiny UI shows something instead of hanging at "starting".
+  tryCatch({
+    .libPaths(libpaths)
+    library(screenllm)
+  }, error = function(e) {
+    try(saveRDS(list(
+      model = model, status = "error", completed = 0, total = NA_real_,
+      detail = "failed",
+      error = paste0("Pull worker startup failed: ", conditionMessage(e)),
+      started_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z")
+    ), progress_path), silent = TRUE)
+    stop(e)
+  })
 
   # Ollama's /api/pull with stream=TRUE returns newline-delimited JSON:
   #   {"status":"pulling manifest"}
@@ -123,16 +137,33 @@ pull_worker_body <- function(model, ollama_url, progress_path, libpaths) {
   }
 
   last_write <- Sys.time()
+  # Track whether Ollama actually confirmed the pull succeeded. The
+  # transport ending cleanly (proxy timeout, socket reset, corpo net
+  # cutting an idle connection, Ollama replying "model not found"
+  # then closing) is NOT enough to call a pull done -- silently
+  # promoting those to "done" left users thinking a 24 GB model was
+  # pulled when only 30 MB had actually landed.
+  saw_success <- FALSE
+  stream_error <- NULL
   callback <- function(x) {
     lines <- strsplit(rawToChar(x), "\n", fixed = TRUE)[[1]]
     for (ln in lines) {
       if (!nzchar(ln)) next
       obj <- tryCatch(jsonlite::fromJSON(ln), error = function(e) NULL)
       if (is.null(obj)) next
+      # Ollama reports pull errors in-band as {"error": "..."} with
+      # no status field. Surface that to the progress file and stop.
+      if (!is.null(obj$error) && nzchar(as.character(obj$error))) {
+        stream_error <<- as.character(obj$error)
+        write_state("error", 0, NA_real_,
+                    detail = "failed", error = stream_error)
+        return(FALSE)
+      }
       status <- obj$status %||% "running"
       completed <- as.numeric(obj$completed %||% NA_real_)
       total <- as.numeric(obj$total %||% NA_real_)
       if (identical(status, "success")) {
+        saw_success <<- TRUE
         write_state("done", total, total, detail = "complete")
         return(FALSE) # stop
       }
@@ -149,6 +180,7 @@ pull_worker_body <- function(model, ollama_url, progress_path, libpaths) {
     httr2::request(paste0(ollama_url, "/api/pull")) |>
       httr2::req_body_json(list(name = model, stream = TRUE)) |>
       httr2::req_timeout(60 * 60) |>
+      httr2::req_error(is_error = function(resp) FALSE) |>
       httr2::req_perform_stream(callback, buffer_kb = 16, round = "line")
     TRUE
   }, error = function(e) {
@@ -157,12 +189,18 @@ pull_worker_body <- function(model, ollama_url, progress_path, libpaths) {
     FALSE
   })
 
-  # If we exited cleanly but never saw the "success" chunk, still mark
-  # done -- the transport ended without error.
-  st <- tryCatch(readRDS(progress_path), error = function(e) NULL)
-  if (isTRUE(ok) && !is.null(st) && !identical(st$status, "done")) {
-    write_state("done", st$total %||% NA_real_, st$total %||% NA_real_,
-                detail = "complete")
+  # Only report "done" when Ollama itself said "success". A transport
+  # that ended without error but never emitted the success chunk is
+  # a truncated pull -- flag it so the caller doesn't proceed to
+  # ranking with a partial model.
+  if (!isTRUE(saw_success) && is.null(stream_error) && isTRUE(ok)) {
+    write_state("error", 0, NA_real_, detail = "incomplete",
+                error = paste0(
+                  "Pull stream ended without a success marker. ",
+                  "The model may not be fully installed -- try again, ",
+                  "or run `ollama pull ", model, "` in a terminal."
+                ))
+    ok <- FALSE
   }
   invisible(ok)
 }
