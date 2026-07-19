@@ -105,8 +105,21 @@ ollama_installed_models <- function(
   )
   if (inherits(resp, "try-error")) return(character())
   body <- httr2::resp_body_json(resp, simplifyVector = TRUE)
-  if (is.null(body$models) || nrow(body$models) == 0L) return(character())
-  tags <- as.character(body$models$name)
+  mods <- body$models
+  # A fresh Ollama install with zero models pulled returns
+  # {"models": []}, which simplifyVector parses to an empty list().
+  # nrow(list()) is NULL, so the previous guard cascaded to NA in `if`
+  # and crashed the whole Setup tab's reactive graph. Handle each
+  # shape (NULL / empty list / empty data.frame / populated
+  # data.frame) explicitly.
+  if (is.null(mods)) return(character())
+  n_mods <- if (is.data.frame(mods)) nrow(mods) else length(mods)
+  if (n_mods == 0L) return(character())
+  tags <- if (is.data.frame(mods)) {
+    as.character(mods$name)
+  } else {
+    vapply(mods, function(m) as.character(m$name %||% ""), character(1))
+  }
   if (isTRUE(include_embedding)) return(tags)
   # Drop known embedding-model families. The naming isn't strictly
   # enforced by Ollama; this covers the popular ones.

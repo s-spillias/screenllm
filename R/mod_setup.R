@@ -274,9 +274,16 @@ mod_setup_server <- function(id, state) {
 
     ollama_state <- shiny::reactive({
       ollama_refresh()  # dependency; refetch when bumped
-      up <- ollama_health(quiet = TRUE)
-      installed <- if (up) ollama_installed_models() else character()
-      list(up = up, installed = installed)
+      # Never let a probe error grey out the whole Setup tab. If
+      # either helper throws we treat Ollama as unreachable so the
+      # UI shows "not reachable" + the Install button, and the rest
+      # of the app stays responsive.
+      up <- tryCatch(ollama_health(quiet = TRUE),
+                     error = function(e) FALSE)
+      installed <- if (isTRUE(up)) {
+        tryCatch(ollama_installed_models(), error = function(e) character())
+      } else character()
+      list(up = isTRUE(up), installed = installed)
     })
 
     output$ollama_badge <- shiny::renderUI({
