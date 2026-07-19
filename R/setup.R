@@ -53,6 +53,50 @@ check_setup <- function(models = .PINNED_DEFAULT_MODELS,
   }
 }
 
+#' Locate the Ollama binary on disk
+#'
+#' `Sys.which("ollama")` returns `""` when the parent process's PATH
+#' doesn't include the install location. This bites macOS GUI R.app
+#' users hard: brew installs Ollama at `/usr/local/bin/ollama` (Intel)
+#' or `/opt/homebrew/bin/ollama` (Apple Silicon), and the double-click
+#' R.app launcher inherits a truncated PATH that omits both. Users
+#' with a fully working `ollama` in Terminal end up with a `screenllm`
+#' app that refuses to start because it can't find the binary.
+#'
+#' This helper first tries `Sys.which()`, then probes a list of
+#' known install locations per platform.
+#'
+#' @return Full path to the binary, or `""` if none found.
+#' @keywords internal
+find_ollama_binary <- function() {
+  path <- unname(Sys.which("ollama"))
+  if (nzchar(path)) return(path)
+  candidates <- switch(
+    Sys.info()[["sysname"]],
+    Darwin = c(
+      "/usr/local/bin/ollama",
+      "/opt/homebrew/bin/ollama",
+      "/Applications/Ollama.app/Contents/Resources/ollama"
+    ),
+    Linux = c(
+      "/usr/local/bin/ollama",
+      "/usr/bin/ollama",
+      "~/.local/bin/ollama"
+    ),
+    Windows = c(
+      file.path(Sys.getenv("LOCALAPPDATA"),
+                "Programs/Ollama/ollama.exe"),
+      "C:/Program Files/Ollama/ollama.exe"
+    ),
+    character()
+  )
+  for (c in candidates) {
+    expanded <- path.expand(c)
+    if (nzchar(expanded) && file.exists(expanded)) return(expanded)
+  }
+  ""
+}
+
 #' Ping the Ollama server
 #'
 #' Returns `TRUE` if the Ollama HTTP API responds within a short timeout.
@@ -199,10 +243,11 @@ install_prereqs <- function(preset = NULL,
   }
   cli::cli_h1("screenllm: install prerequisites")
 
-  # Step 1: is Ollama on PATH?
-  have_binary <- nzchar(Sys.which("ollama"))
+  # Step 1: is Ollama on PATH (or in a known install location)?
+  binary_path <- find_ollama_binary()
+  have_binary <- nzchar(binary_path)
   if (have_binary) {
-    cli::cli_alert_success("Ollama binary found at {.path {unname(Sys.which('ollama'))}}")
+    cli::cli_alert_success("Ollama binary found at {.path {binary_path}}")
   } else {
     cli::cli_alert_warning("Ollama binary not found on PATH.")
     if (!interactive) {
@@ -309,7 +354,7 @@ try_install_ollama <- function() {
       cli::cli_alert_danger("Install command exited with status {status}.")
       return(FALSE)
     }
-    return(nzchar(Sys.which("ollama")))
+    return(nzchar(find_ollama_binary()))
   } else if (ans == 2L) {
     open_download_page()
     return(FALSE)
@@ -321,11 +366,27 @@ try_install_ollama <- function() {
 # For a given OS, return a list(manager, command) that would install
 # Ollama, or NULL if no supported manager is available.
 ollama_install_candidate <- function(sysname = Sys.info()[["sysname"]]) {
+  # macOS GUI R.app inherits a truncated PATH that omits both brew
+  # locations, so Sys.which("brew") returns "" for users who have
+  # brew working fine in Terminal. Probe known locations too.
+  find_brew <- function() {
+    p <- unname(Sys.which("brew"))
+    if (nzchar(p)) return(p)
+    for (c in c("/usr/local/bin/brew", "/opt/homebrew/bin/brew")) {
+      if (file.exists(c)) return(c)
+    }
+    ""
+  }
   has <- function(cmd) nzchar(Sys.which(cmd))
   switch(
     sysname,
-    "Darwin" = if (has("brew")) list(manager = "Homebrew",
-                                     command = "brew install ollama") else NULL,
+    "Darwin" = {
+      brew <- find_brew()
+      if (nzchar(brew)) {
+        list(manager = "Homebrew",
+             command = paste(shQuote(brew), "install ollama"))
+      } else NULL
+    },
     "Windows" = if (has("winget"))
       list(manager = "winget",
            command = "winget install -e --id Ollama.Ollama") else NULL,
@@ -349,7 +410,7 @@ open_download_page <- function() {
 # Try to launch `ollama serve` in the background. Best-effort; on macOS
 # and Windows the tray app usually handles this itself once installed.
 try_start_ollama_daemon <- function() {
-  ollama <- Sys.which("ollama")
+  ollama <- find_ollama_binary()
   if (!nzchar(ollama)) return(invisible(FALSE))
   # Fire-and-forget; ignore output.
   suppressWarnings(system2(ollama, "serve",

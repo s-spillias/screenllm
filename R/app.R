@@ -18,7 +18,7 @@ launch_app <- function(project = NULL, launch_browser = interactive()) {
   # up Ollama. The app itself still opens (Setup tab will show
   # everything the user needs); this just points them at the
   # one-liner that automates the install.
-  if (interactive() && !nzchar(Sys.which("ollama"))) {
+  if (interactive() && !nzchar(find_ollama_binary())) {
     # `cli_alert_info` takes a single `text` argument (positional
     # extras land in `id`, `class`, `wrap` and crash with "argument
     # is not interpretable as logical"). Build one string first.

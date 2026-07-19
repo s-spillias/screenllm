@@ -19,8 +19,31 @@
 #' @export
 data_root <- function() {
   root <- tools::R_user_dir("screenllm", which = "data")
-  fs::dir_create(root, recurse = TRUE)
-  fs::dir_create(fs::path(root, "projects"), recurse = TRUE)
+  # On a locked-down system (corporate laptop with a read-only or
+  # redirected HOME, some Posit Cloud / RStudio Server images),
+  # fs::dir_create() throws and every downstream call -- Setup tab
+  # renders, project pickers, save_artefact -- dies with an opaque
+  # permission error. Fall back to a session-local directory so
+  # the app at least runs; projects won't persist across sessions,
+  # but "app works, no persistence" beats "app doesn't launch".
+  ok <- tryCatch({
+    fs::dir_create(root, recurse = TRUE)
+    fs::dir_create(fs::path(root, "projects"), recurse = TRUE)
+    TRUE
+  }, error = function(e) FALSE)
+  if (!ok) {
+    fallback <- fs::path(tempdir(), "screenllm-data")
+    fs::dir_create(fallback, recurse = TRUE)
+    fs::dir_create(fs::path(fallback, "projects"), recurse = TRUE)
+    if (!identical(getOption("screenllm.data_root_warned"), TRUE)) {
+      cli::cli_alert_warning(
+        "Could not write to {.path {root}}; using {.path {fallback}}. \\
+         Projects will not persist across R sessions."
+      )
+      options(screenllm.data_root_warned = TRUE)
+    }
+    return(as.character(fallback))
+  }
   as.character(root)
 }
 
@@ -95,10 +118,23 @@ slugify_project_name <- function(name) {
 save_artefact <- function(project, artefact, x) {
   fname <- match_artefact(artefact)
   path <- fs::path(project_dir(project, create = TRUE), fname)
+  # Atomic write: temp file + rename. A crash mid-write (laptop lid
+  # closed during autosave, R killed, machine shutdown) previously
+  # left a truncated file that broke the next project load and greyed
+  # out the Setup tab. Same pattern already used in rank.R for the
+  # cache, generalised here.
+  tmp <- paste0(path, ".tmp-", Sys.getpid())
   if (grepl("\\.csv$", fname)) {
-    utils::write.csv(x, path, row.names = FALSE)
+    utils::write.csv(x, tmp, row.names = FALSE, fileEncoding = "UTF-8")
   } else {
-    saveRDS(x, path)
+    saveRDS(x, tmp)
+  }
+  ok <- file.rename(tmp, path)
+  if (!isTRUE(ok)) {
+    # Fallback for cross-filesystem renames (rare, but happens when
+    # R_user_dir is on a network mount and tempfile is on local disk).
+    file.copy(tmp, path, overwrite = TRUE)
+    unlink(tmp)
   }
   invisible(as.character(path))
 }
@@ -114,10 +150,19 @@ load_artefact <- function(project, artefact, default = NULL) {
   fname <- match_artefact(artefact)
   path <- fs::path(project_dir(project, create = FALSE), fname)
   if (!fs::file_exists(path)) return(default)
+  # A truncated / zero-byte artefact left by a crashed prior write
+  # used to blow up load_project_into_state() and grey the Setup
+  # tab. Return the default silently -- the same behaviour as a
+  # missing file -- so the user gets a fresh slate instead of a
+  # dead app.
   if (grepl("\\.csv$", fname)) {
-    utils::read.csv(path, stringsAsFactors = FALSE)
+    tryCatch(
+      utils::read.csv(path, stringsAsFactors = FALSE,
+                      fileEncoding = "UTF-8"),
+      error = function(e) default
+    )
   } else {
-    readRDS(path)
+    tryCatch(readRDS(path), error = function(e) default)
   }
 }
 

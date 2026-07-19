@@ -299,7 +299,7 @@ mod_setup_server <- function(id, state) {
     # actually not installed rather than just not running).
     output$ollama_action_btn <- shiny::renderUI({
       s <- ollama_state()
-      have_binary <- nzchar(Sys.which("ollama"))
+      have_binary <- nzchar(find_ollama_binary())
       if (isTRUE(s$up) || have_binary) {
         shiny::actionButton(ns("refresh_ollama"), "Refresh",
                             class = "btn-sm btn-outline-secondary")

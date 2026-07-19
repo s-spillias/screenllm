@@ -39,6 +39,29 @@ read_records <- function(source, id_column = NULL) {
   # unconditionally.
   df$id <- as.character(df$id)
 
+  # Duplicate ids silently corrupt the ranking: rank_records() looks
+  # up a record by `records[records$id == row$id, ][1, ]`, so both
+  # rows get scored with the FIRST row's title/abstract. Catch it at
+  # ingest with a message the user can act on -- merging multiple
+  # database exports is the common cause.
+  dupes <- df$id[duplicated(df$id)]
+  if (length(dupes) > 0L) {
+    show <- unique(dupes)
+    example <- if (length(show) > 5L) {
+      c(show[1:5], sprintf("...and %d more", length(show) - 5L))
+    } else show
+    cli::cli_abort(c(
+      "Duplicate record ids in the input ({length(unique(dupes))} distinct value{?s}).",
+      "i" = "Duplicated: {.val {example}}",
+      "i" = paste0(
+        "screenllm keys the cache by id, so duplicates would score ",
+        "both rows with the first row's abstract. Either drop the ",
+        "duplicates, deduplicate with `find_duplicates()`, or pass ",
+        "`id_column = NULL` to let screenllm assign fresh ids."
+      )
+    ))
+  }
+
   # Reorder so id, title, abstract come first.
   df <- dplyr::relocate(df, dplyr::all_of(c("id", "title", "abstract")))
   df$title <- as.character(df$title)
@@ -80,9 +103,61 @@ read_records_from_path <- function(path) {
 # AU (authors), UR (URL), and ER (end of record). Silently ignores the
 # rest. Multi-line values are supported by continuation of the same
 # tag.
+#' Read a text file with a robust encoding fallback.
+#'
+#' EndNote / Web of Science / Zotero RIS and CSV exports on Windows
+#' are frequently Windows-1252 or Latin-1, not UTF-8. Hardcoding
+#' encoding = "UTF-8" caused readLines to mark strings as UTF-8 even
+#' when bytes were invalid, and downstream grepl/regexpr threw
+#' "input string N is invalid in this locale". Try encodings in
+#' descending likelihood and return the first that decodes cleanly.
+#'
+#' @param path File path.
+#' @return Character vector of lines.
+#' @keywords internal
+read_lines_any_encoding <- function(path) {
+  raw_bytes <- readBin(path, "raw", file.info(path)$size)
+  # Strip UTF-8 BOM if present -- Zotero on Windows emits one, and
+  # it would otherwise leave a 3-byte prefix on the first line that
+  # breaks the "^TY  - JOUR" record-start match.
+  if (length(raw_bytes) >= 3L &&
+        identical(as.integer(raw_bytes[1:3]), c(0xEFL, 0xBBL, 0xBFL))) {
+    raw_bytes <- raw_bytes[-(1:3)]
+  }
+  # Prefer readr::guess_encoding (statistical, fast); otherwise try
+  # each candidate in descending real-world frequency.
+  encodings <- if (rlang::is_installed("readr")) {
+    guessed <- tryCatch(
+      readr::guess_encoding(raw_bytes, n_max = 10000, threshold = 0.2),
+      error = function(e) NULL
+    )
+    guesses <- if (!is.null(guessed) && nrow(guessed) > 0L) {
+      as.character(guessed$encoding)
+    } else character()
+    unique(c(guesses, "UTF-8", "Windows-1252", "latin1"))
+  } else {
+    c("UTF-8", "Windows-1252", "latin1")
+  }
+  # `rawToChar` interprets bytes as a character string without decoding
+  # -- fine as long as there are no embedded nulls (raw text files
+  # rarely have them). iconv then decodes from the candidate encoding.
+  raw_str <- suppressWarnings(rawToChar(raw_bytes))
+  for (enc in encodings) {
+    txt <- suppressWarnings(iconv(raw_str, from = enc, to = "UTF-8",
+                                  sub = NA))
+    if (!is.na(txt)) {
+      return(strsplit(txt, "\r\n|\r|\n", perl = TRUE)[[1L]])
+    }
+  }
+  # Last resort: force UTF-8 with lossy substitution so users get a
+  # reduced-but-readable file rather than a hard error.
+  fallback <- iconv(raw_str, from = "UTF-8", to = "UTF-8", sub = "?")
+  strsplit(fallback, "\r\n|\r|\n", perl = TRUE)[[1L]]
+}
+
 #' @keywords internal
 read_ris_records <- function(path) {
-  lines <- readLines(path, warn = FALSE, encoding = "UTF-8")
+  lines <- read_lines_any_encoding(path)
   # Records begin with TY - and end with ER -.
   records <- list()
   current <- list()
@@ -183,15 +258,20 @@ find_duplicates <- function(records, fuzzy = TRUE) {
   for (i in seq_len(n)) {
     tkey <- norm_title[i]
     dkey <- doi[i]
+    # Guard NA at every use: normalise_title(NA) is NA_character_,
+    # nzchar(NA) is NA, and exists(NA, envir) throws "invalid first
+    # argument". Any single record with a missing title used to crash
+    # the whole Corpus tab dedup step.
     if (!is.na(dkey) && nzchar(dkey) && exists(dkey, envir = seen_dois)) {
       duplicate_of[i] <- get(dkey, envir = seen_dois)
       next
     }
-    if (nzchar(tkey) && exists(tkey, envir = seen_titles)) {
+    if (!is.na(tkey) && nzchar(tkey) && exists(tkey, envir = seen_titles)) {
       duplicate_of[i] <- get(tkey, envir = seen_titles)
       next
     }
-    if (isTRUE(fuzzy) && rlang::is_installed("stringdist") && nzchar(tkey)) {
+    if (isTRUE(fuzzy) && rlang::is_installed("stringdist") &&
+          !is.na(tkey) && nzchar(tkey)) {
       prior <- ls(seen_titles)
       if (length(prior) > 0L) {
         sims <- 1 - stringdist::stringdist(tkey, prior, method = "jw")
@@ -202,7 +282,7 @@ find_duplicates <- function(records, fuzzy = TRUE) {
         }
       }
     }
-    if (nzchar(tkey)) assign(tkey, ids[i], envir = seen_titles)
+    if (!is.na(tkey) && nzchar(tkey)) assign(tkey, ids[i], envir = seen_titles)
     if (!is.na(dkey) && nzchar(dkey)) assign(dkey, ids[i], envir = seen_dois)
   }
   records$duplicate_of <- duplicate_of
@@ -228,34 +308,122 @@ normalise_doi <- function(x) {
 
 #' @keywords internal
 read_csv_records <- function(path, sep = ",") {
+  # Excel-on-Windows exports CSVs as Windows-1252 (unless the user
+  # explicitly picks "CSV UTF-8"), and Zotero can emit UTF-8-with-BOM.
+  # Read raw first, detect encoding, then hand a properly-locale'd
+  # readr call the exact path. Falls back to a scrubbed temp file for
+  # utils::read.csv when readr isn't installed.
+  raw_bytes <- tryCatch(
+    readBin(path, "raw", file.info(path)$size),
+    error = function(e) NULL
+  )
+  if (is.null(raw_bytes)) {
+    # Something's wrong at the FS layer; let the downstream reader
+    # produce its own error.
+    return(read_csv_fallback(path, sep))
+  }
+  # Strip UTF-8 BOM if present.
+  had_bom <- length(raw_bytes) >= 3L &&
+    identical(as.integer(raw_bytes[1:3]),
+              c(0xEFL, 0xBBL, 0xBFL))
+  if (had_bom) raw_bytes <- raw_bytes[-(1:3)]
+
+  encoding <- detect_encoding(raw_bytes)
+
   if (rlang::is_installed("readr")) {
+    # Write scrubbed (BOM-free) bytes to a temp file so readr sees
+    # them without the BOM. Cheap: one write per import.
+    tmp <- tempfile(fileext = ".csv")
+    on.exit(unlink(tmp), add = TRUE)
+    writeBin(raw_bytes, tmp)
     readr::read_delim(
-      path, delim = sep, show_col_types = FALSE,
-      progress = FALSE, name_repair = "unique"
+      tmp, delim = sep, show_col_types = FALSE,
+      progress = FALSE, name_repair = "unique",
+      locale = readr::locale(encoding = encoding)
     )
   } else {
-    tibble::as_tibble(
-      utils::read.csv(path, sep = sep, stringsAsFactors = FALSE)
-    )
+    read_csv_fallback(path, sep, encoding = encoding, raw_bytes = raw_bytes)
   }
 }
 
 #' @keywords internal
+read_csv_fallback <- function(path, sep, encoding = "UTF-8",
+                              raw_bytes = NULL) {
+  # If we already scrubbed the BOM, write bytes to a temp path so
+  # read.csv doesn't see it. Otherwise read directly.
+  target <- path
+  clean_up <- character()
+  on.exit(unlink(clean_up), add = TRUE)
+  if (!is.null(raw_bytes)) {
+    target <- tempfile(fileext = ".csv")
+    clean_up <- c(clean_up, target)
+    writeBin(raw_bytes, target)
+  }
+  tibble::as_tibble(utils::read.csv(
+    target, sep = sep, stringsAsFactors = FALSE,
+    fileEncoding = encoding
+  ))
+}
+
+#' @keywords internal
+detect_encoding <- function(raw_bytes) {
+  if (rlang::is_installed("readr")) {
+    guessed <- tryCatch(
+      readr::guess_encoding(raw_bytes, n_max = 10000, threshold = 0.2),
+      error = function(e) NULL
+    )
+    if (!is.null(guessed) && nrow(guessed) > 0L) {
+      # Prefer UTF-8 if it's plausible (avoids gratuitous
+      # ASCII-vs-UTF-8 detection swings on small inputs).
+      encs <- as.character(guessed$encoding)
+      if ("UTF-8" %in% encs) return("UTF-8")
+      return(encs[1L])
+    }
+  }
+  # No guess. Assume UTF-8; the reader will produce mojibake on
+  # Windows-1252 input but at least won't hard-fail.
+  "UTF-8"
+}
+
+#' @keywords internal
 normalise_column_names <- function(df) {
+  # Aliases for the column names the app needs. Every real-world
+  # export path we can plausibly hit is listed here so users don't
+  # get "Input is missing required column" when their file actually
+  # has the data under a slightly different label.
   aliases <- list(
-    title = c("Title", "TI"),
-    abstract = c("Abstract", "AB"),
-    id = c("ID", "record_id", "RefID", "Reference ID", "EID"),
-    year = c("Year", "PY"),
+    title = c("Title", "TI", "Item Title", "Manuscript Title",
+              "Publication Title", "Article Title"),
+    abstract = c("Abstract", "AB", "Abstract Note", "Summary",
+                 "Notes"),
+    id = c("ID", "record_id", "RefID", "Reference ID", "EID",
+           "Key", "Item ID"),
+    year = c("Year", "PY", "Publication Year", "Publication Date"),
     doi = c("DOI"),
-    journal = c("Journal", "Source title", "SO")
+    journal = c("Journal", "Source title", "SO",
+                "Publication Title", "Journal Title", "Container Title")
   )
   for (canon in names(aliases)) {
     hits <- intersect(names(df), aliases[[canon]])
-    if (canon %in% names(df)) next
-    if (length(hits) > 0L) {
-      names(df)[which(names(df) == hits[1L])] <- canon
+    if (length(hits) == 0L) next
+    if (canon %in% names(df)) {
+      # A canonical column already exists. If it's entirely
+      # blank/NA, promote a populated case-variant/alias in its
+      # place; otherwise leave both alone. This prevents the
+      # "blank `title` beats populated `Title`" case that shows
+      # up when two pipelines merge frames with the same field
+      # under different capitalisations.
+      canon_col <- df[[canon]]
+      canon_blank <- all(is.na(canon_col) | !nzchar(as.character(canon_col)))
+      if (canon_blank) {
+        winner <- hits[[1L]]
+        df[[canon]] <- df[[winner]]
+        df[[winner]] <- NULL
+      }
+      next
     }
+    winner <- hits[[1L]]
+    names(df)[which(names(df) == winner)] <- canon
   }
   df
 }
