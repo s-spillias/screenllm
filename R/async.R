@@ -61,8 +61,39 @@ start_rank_job <- function(project,
                            ensemble = default_ensemble(),
                            sample_size = NULL,
                            random_sample = TRUE,
-                           seed = 1L) {
+                           seed = 1L,
+                           force = FALSE) {
   rlang::check_installed("callr", "to run ranking in the background.")
+
+  # A second Shiny session on the same project would clobber the
+  # shared worker files (records artefact + progress rds) and both
+  # status polls would then read garbage. Detect a still-running
+  # job by looking at the progress file's status + freshness of its
+  # last write. If mtime is within the throttle interval used by the
+  # worker (< 60s), it's genuinely alive; if it's older, we assume
+  # the previous run died (crash, force-quit) and take over silently.
+  # Pass force = TRUE to skip this check.
+  if (!isTRUE(force)) {
+    st_prev <- load_artefact(project, "progress")
+    prog_path <- fs::path(project_dir(project, create = FALSE),
+                          .project_artefacts$progress)
+    if (!is.null(st_prev) &&
+          identical(st_prev$status, "running") &&
+          fs::file_exists(prog_path)) {
+      mtime <- as.numeric(Sys.time() - fs::file_info(prog_path)$modification_time,
+                          units = "secs")
+      if (!is.na(mtime) && mtime < 60) {
+        cli::cli_abort(c(
+          "A ranking job for project {.val {project}} is already running.",
+          "i" = "Progress file was updated {round(mtime)}s ago.",
+          "i" = paste0(
+            "If you're sure it's dead (killed R session, another ",
+            "machine, etc.), pass `force = TRUE` to take over."
+          )
+        ))
+      }
+    }
+  }
 
   records <- load_artefact(project, "records")
   criteria <- load_artefact(project, "criteria")

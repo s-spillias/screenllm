@@ -154,7 +154,10 @@ mod_screen_server <- function(id, state) {
       if (!nzchar(abstract)) {
         return(shiny::em(class = "text-muted", "(no abstract)"))
       }
-      shiny::HTML(gsub("\n", "<br>", abstract, fixed = TRUE))
+      # `\r?\n` catches CRLF line endings from Windows-authored
+      # abstracts too; the old fixed = TRUE + "\n" left a stray \r
+      # before every <br>.
+      shiny::HTML(gsub("\r?\n", "<br>", abstract))
     })
 
     output$record_justification <- shiny::renderUI({

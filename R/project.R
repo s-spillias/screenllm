@@ -82,10 +82,18 @@ project_dir <- function(name, create = FALSE) {
 
 #' @keywords internal
 slugify_project_name <- function(name) {
-  slug <- gsub("[^A-Za-z0-9_.-]+", "_", trimws(name))
+  name <- trimws(name)
+  slug <- gsub("[^A-Za-z0-9_.-]+", "_", name)
   slug <- gsub("_+", "_", slug)
   slug <- gsub("^_|_$", "", slug)
-  if (!nzchar(slug)) slug <- "unnamed_project"
+  # A name written entirely in non-Latin script (Chinese, Arabic,
+  # Cyrillic, etc.) used to collapse to "" and then to a shared
+  # "unnamed_project" bucket -- two different Chinese-named projects
+  # silently overwrote each other on disk. Append a short hash of
+  # the original name so distinct inputs get distinct slugs.
+  if (!nzchar(slug)) {
+    slug <- paste0("project_", substr(digest::digest(name), 1, 10))
+  }
   slug
 }
 

@@ -485,12 +485,38 @@ normalise_decisions_shape <- function(d) {
 #' @keywords internal
 normalise_decisions <- function(x) {
   x <- trimws(as.character(x))
+  low <- tolower(x)
   out <- rep(NA_character_, length(x))
-  out[grepl("^accept", tolower(x))] <- "Accept"
-  out[grepl("^reject", tolower(x))] <- "Reject"
-  out[grepl("^exclud", tolower(x))] <- "Reject"
-  out[grepl("^includ", tolower(x))] <- "Accept"
-  out[x %in% c("Y", "y", "1", "TRUE")] <- "Accept"
-  out[x %in% c("N", "n", "0", "FALSE")] <- "Reject"
+  out[grepl("^accept", low)] <- "Accept"
+  out[grepl("^reject", low)] <- "Reject"
+  out[grepl("^exclud", low)] <- "Reject"
+  out[grepl("^includ", low)] <- "Accept"
+  # English + common European locale variants for TRUE/FALSE.
+  # Excel writes booleans in the user's UI language, so a
+  # French/German/Spanish/Italian reviewer's decisions.csv routinely
+  # rides through here with "VRAI", "WAHR", "SI", or "VERO" instead
+  # of "TRUE". Coerce them all. Also handle numeric decisions
+  # written by Excel with a trailing ".0" (1.0 / 0.0).
+  accept_lits <- tolower(c(
+    "Y", "1", "1.0", "TRUE",
+    "Yes", "Ja", "Oui", "Si", "Sim", "Da",   # en/de/fr/es-it/pt/ru
+    "VRAI",   # fr TRUE
+    "WAHR",   # de TRUE
+    "VERO",   # it TRUE
+    "VERDADERO", # es TRUE
+    "SANT",   # sv TRUE
+    "TRUE."
+  ))
+  reject_lits <- tolower(c(
+    "N", "0", "0.0", "FALSE",
+    "No", "Nein", "Non", "Nao", "Nej", "Njet",
+    "FAUX",   # fr FALSE
+    "FALSCH", # de FALSE
+    "FALSO",  # it/es/pt FALSE
+    "FALSKT", # sv FALSE
+    "FALSE."
+  ))
+  out[low %in% accept_lits] <- "Accept"
+  out[low %in% reject_lits] <- "Reject"
   out
 }

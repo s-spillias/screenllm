@@ -154,8 +154,17 @@ gpu_status <- function(throttled_clock_mhz = 800,
   if (is.null(out) || length(out) == 0L || !nzchar(out[1])) return(fail)
   parts <- strsplit(out[1], ",", fixed = TRUE)[[1]]
   vals <- suppressWarnings(as.numeric(trimws(parts)))
-  if (length(vals) < 6L || any(is.na(vals[1:4]))) return(fail)
-  loaded <- vals[3] >= loaded_mib
+  # Previously the guard `any(is.na(vals[1:4]))` treated the whole
+  # snapshot as unavailable if any of the four required fields
+  # returned "[Not Supported]". WSL2, MIG-partitioned A100 slices,
+  # containerised drivers, and older laptop dGPUs commonly return
+  # that literal for power_draw / memory_clock / utilisation but
+  # still support graphics clock + memory used, which is all we
+  # actually need for the throttle heuristic. Only fail if the
+  # CRITICAL fields (graphics clock + memory used) are NA; treat
+  # NA optional fields as "just don't display them".
+  if (length(vals) < 6L || is.na(vals[1]) || is.na(vals[3])) return(fail)
+  loaded <- isTRUE(vals[3] >= loaded_mib)
   throttled <- isTRUE(loaded && vals[1] < throttled_clock_mhz)
   hint <- if (throttled) {
     paste(
