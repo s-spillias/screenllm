@@ -138,11 +138,17 @@ mod_rank_server <- function(id, state) {
       ens <- state$ensemble
       if (is.null(ens)) return()
       cur <- shiny::isolate(input$replicates)
-      # Only update when different, so we don't fight the user's
-      # in-flight edits.
-      if (is.null(cur) || is.na(cur) || cur != as.integer(ens$replicates)) {
-        shiny::updateNumericInput(session, "replicates",
-                                    value = as.integer(ens$replicates))
+      # ens$replicates can be NULL on a legacy/hand-edited ensemble;
+      # as.integer(NULL) is integer(0), which turns the `!=` comparison
+      # into logical(0) and crashes the `if`. Coerce to a scalar default
+      # so the observer degrades gracefully instead of taking down the
+      # Rank tab.
+      ens_reps <- if (length(ens$replicates) == 1L &&
+                        !is.na(ens$replicates) && ens$replicates > 0L) {
+        as.integer(ens$replicates)
+      } else 1L
+      if (is.null(cur) || is.na(cur) || cur != ens_reps) {
+        shiny::updateNumericInput(session, "replicates", value = ens_reps)
       }
     })
 
@@ -151,8 +157,11 @@ mod_rank_server <- function(id, state) {
     effective_ensemble <- shiny::reactive({
       ens <- state$ensemble
       if (is.null(ens)) return(NULL)
-      reps <- as.integer(input$replicates %||% ens$replicates)
-      if (is.na(reps) || reps < 1L) reps <- as.integer(ens$replicates)
+      # Same NULL/integer(0) guard as above -- both `input$replicates`
+      # and `ens$replicates` may be missing on first render.
+      raw <- input$replicates %||% ens$replicates
+      reps <- suppressWarnings(as.integer(raw))
+      if (length(reps) != 1L || is.na(reps) || reps < 1L) reps <- 1L
       ens$replicates <- reps
       ens
     })
@@ -408,9 +417,13 @@ mod_rank_server <- function(id, state) {
       }
       models <- st$ensemble_models
       per_model_target <- st$n_records * (st$ensemble_replicates %||% 1L)
-      # Count how many calls each model has completed.
-      scores <- st$scores %||% data.frame(model = character())
-      done_by_model <- if (nrow(scores) > 0L) {
+      # Count how many calls each model has completed. `st$scores` is
+      # `list()` on an idle/never-run project (async.R writes that as
+      # the initial state); %||% only replaces NULL so we still land
+      # on a list. Mirror the defensive is.data.frame test used in
+      # partial() below.
+      scores <- st$scores
+      done_by_model <- if (is.data.frame(scores) && nrow(scores) > 0L) {
         table(factor(scores$model, levels = models))
       } else stats::setNames(integer(length(models)), models)
       bars <- lapply(models, function(m) {

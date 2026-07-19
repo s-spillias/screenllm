@@ -199,8 +199,12 @@ mod_report_server <- function(id, state) {
         shiny::tags$span(class = "badge bg-secondary", "your decision: Reject")
       }
       # LLM justifications block, same style as Rank + Screen tabs.
-      just <- rec$justifications[[1L]]
-      panels <- if (is.null(just) || nrow(just) == 0L) {
+      # Guard against older ranked artefacts with no justifications
+      # column (rec$justifications NULL -> [[1L]] out of bounds) and
+      # bare-list cells (nrow returns NULL -> if cascades to NA).
+      just <- tryCatch(rec$justifications[[1L]], error = function(e) NULL)
+      panels <- if (is.null(just) || !is.data.frame(just) ||
+                      nrow(just) == 0L) {
         shiny::tags$em(class = "text-muted small",
                        "(no justifications recorded)")
       } else {

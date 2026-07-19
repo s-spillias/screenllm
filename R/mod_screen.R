@@ -68,6 +68,10 @@ mod_screen_server <- function(id, state) {
       p <- state$plan
       if (is.null(p)) return(NULL)
       df <- p$to_screen
+      # Older plan artefacts (pre-0.1.0 schema) may not have populated
+      # $to_screen; nrow(NULL) is NULL and seq_len(NULL) crashes, which
+      # greys the whole Screen tab on project load.
+      if (!is.data.frame(df) || nrow(df) == 0L) return(NULL)
       df$row_no <- seq_len(nrow(df))
       df
     })
@@ -158,8 +162,17 @@ mod_screen_server <- function(id, state) {
         return(shiny::em(class = "text-muted small",
                          "No record selected."))
       }
-      just <- state$ranked$justifications[state$ranked$id == r$id][[1]]
-      if (is.null(just) || nrow(just) == 0L) {
+      # Guard three failure modes: (a) ranked artefact from an older
+      # schema with no justifications column at all (state$ranked$justifications
+      # is NULL -> [[1]] out of bounds); (b) record id not present in
+      # ranked (empty subset -> [[1]] out of bounds); (c) justification
+      # cell is a bare list (older schema) rather than a data frame,
+      # making nrow() return NULL and the `if` cascade to NA.
+      just <- tryCatch(
+        state$ranked$justifications[state$ranked$id == r$id][[1]],
+        error = function(e) NULL
+      )
+      if (is.null(just) || !is.data.frame(just) || nrow(just) == 0L) {
         return(shiny::em(class = "text-muted small",
                          "(no justification recorded)"))
       }

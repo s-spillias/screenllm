@@ -188,10 +188,14 @@ ollama_score <- function(model, prompt, temperature,
 # (`:20b`, `:latest`, `:q4_K_M`) don't need enumerating.
 #' @keywords internal
 is_reasoning_model <- function(tag) {
-  if (!is.character(tag) || length(tag) != 1L) return(FALSE)
+  # NA_character_ passes both the is.character and length guards
+  # but makes grepl() return NA, any(c(NA, ...)) return NA, and
+  # `if (!is_reasoning_model(model))` throw "missing value where
+  # TRUE/FALSE needed" -- crashing every LLM call in a run.
+  if (!is.character(tag) || length(tag) != 1L || is.na(tag)) return(FALSE)
   patterns <- c("^gpt-oss", "^deepseek-r1", "^phi4-reasoning",
                 "-thinking", "-reasoning")
-  any(vapply(patterns, function(p) grepl(p, tag), logical(1)))
+  isTRUE(any(vapply(patterns, function(p) grepl(p, tag), logical(1))))
 }
 
 # Extract the first balanced-braces JSON object substring from `s`.

@@ -172,23 +172,42 @@ rank_records <- function(records,
     )
   }
 
-  # Build a long tibble and aggregate per record.
+  # Build a long tibble and aggregate per record. Any single cache
+  # entry missing a field (older package version, malformed backend
+  # response persisted, etc.) would have crashed the whole vapply --
+  # discarding hours of scoring right at the aggregation step. Use
+  # a per-element accessor that returns NA on a missing/wrong-length
+  # value instead.
+  pick <- function(s, key, type, default) {
+    v <- s[[key]]
+    if (is.null(v) || length(v) != 1L) return(default)
+    tryCatch(as(v, type), error = function(e) default)
+  }
   long <- tibble::tibble(
-    id = vapply(scores, function(s) s$id, character(1)),
-    model = vapply(scores, function(s) s$model, character(1)),
-    replicate = vapply(scores, function(s) s$replicate, integer(1)),
-    score = vapply(scores, function(s) as.numeric(s$score), numeric(1)),
-    explanation = vapply(
-      scores,
-      function(s) if (is.null(s$explanation)) NA_character_ else as.character(s$explanation),
-      character(1)
-    ),
-    error = vapply(
-      scores,
-      function(s) if (is.null(s$error)) NA_character_ else as.character(s$error),
-      character(1)
-    )
+    id = vapply(scores, function(s) pick(s, "id", "character", NA_character_),
+                character(1)),
+    model = vapply(scores, function(s) pick(s, "model", "character", NA_character_),
+                   character(1)),
+    replicate = vapply(scores, function(s) pick(s, "replicate", "integer", NA_integer_),
+                       integer(1)),
+    score = vapply(scores, function(s) pick(s, "score", "numeric", NA_real_),
+                   numeric(1)),
+    explanation = vapply(scores,
+                         function(s) pick(s, "explanation", "character", NA_character_),
+                         character(1)),
+    error = vapply(scores, function(s) pick(s, "error", "character", NA_character_),
+                   character(1))
   )
+  # Drop any all-NA-id rows: those are cache files whose id field
+  # went missing, and we can't join them back to a record anyway.
+  n_orphan <- sum(is.na(long$id))
+  if (n_orphan > 0L) {
+    if (verbose) cli::cli_alert_warning(
+      "Dropped {n_orphan} score{?s} with missing id (likely from an older \\
+       cache; safe to ignore, or clear the cache to remove the warning)."
+    )
+    long <- long[!is.na(long$id), , drop = FALSE]
+  }
 
   # Warn loudly if a substantial fraction of calls failed. Silence is
   # dangerous here: the previous behaviour let "every model returned
