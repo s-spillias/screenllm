@@ -80,8 +80,8 @@ pull_job_status <- function(model) {
     round(100 * st$completed / st$total, 1)
   } else 0
   elapsed <- if (!is.null(st$started_at)) {
-    started <- try(as.POSIXct(st$started_at), silent = TRUE)
-    if (inherits(started, "POSIXct")) {
+    started <- parse_started_at(st$started_at)
+    if (inherits(started, "POSIXct") && !is.na(started)) {
       as.numeric(Sys.time() - started, units = "secs")
     } else NA_real_
   } else NA_real_

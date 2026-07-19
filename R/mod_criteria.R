@@ -149,7 +149,13 @@ mod_criteria_server <- function(id, state) {
     output$prompt_preview <- shiny::renderText({
       c <- current_criteria()
       if (is.null(c)) return("(criteria not yet valid)")
-      rec <- if (!is.null(state$records)) {
+      # An empty (header-only) corpus makes state$records[1, ] a
+      # 0-row frame, which build_prompt() rightly rejects with
+      # cli::cli_abort("record must be a one-row data frame ..."),
+      # and the abort message then shows up in the preview panel.
+      # Fall back to the stub record whenever state$records has
+      # no rows.
+      rec <- if (!is.null(state$records) && nrow(state$records) > 0L) {
         state$records[1, ]
       } else {
         data.frame(id = "record_1",

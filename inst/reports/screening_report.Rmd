@@ -119,7 +119,8 @@ if (!is.null(ranked) && !is.null(decisions)) {
     cat("No strong disagreements identified.\n")
   } else {
     keep <- intersect(
-      c("id", "title", "universal_best_score", "human_decision", "kind"),
+      c("id", "title", "universal_best_score", "human_decision",
+        "disagreement"),
       names(aud)
     )
     knitr::kable(aud[, keep, drop = FALSE], row.names = FALSE)

@@ -317,7 +317,15 @@ mod_setup_server <- function(id, state) {
     shiny::observeEvent(input$install_ollama_btn, {
       candidate <- ollama_install_candidate()
       sysname <- Sys.info()[["sysname"]]
-      cmd <- candidate$command %||% "curl -fsSL https://ollama.com/install.sh | sh"
+      # Fallback command: only ever show the Linux install script
+      # AS A LINUX fallback. Showing a `curl | sh` pipeline to a
+      # Windows-10-without-winget user was actively misleading -- it
+      # can't run in cmd/PowerShell as-is and the modal claimed
+      # "Detected: Windows (manual)" while displaying a Linux command.
+      cmd <- if (!is.null(candidate)) candidate$command
+             else if (identical(sysname, "Linux"))
+               "curl -fsSL https://ollama.com/install.sh | sh"
+             else NA_character_
       manager <- candidate$manager %||% "manual"
       # On Linux, the install script uses sudo internally and needs a
       # TTY password prompt, which a Shiny modal can't provide. Show
@@ -339,10 +347,14 @@ mod_setup_server <- function(id, state) {
           " Copy the command below into a terminal and run it, or click ",
           "\"Try direct install\" if available."
         ),
-        shiny::tags$pre(
+        if (!is.na(cmd)) shiny::tags$pre(
           class = "p-2 bg-body-tertiary small",
           style = "user-select: text;",
           cmd
+        ) else shiny::tags$p(
+          class = "text-muted small",
+          "No supported package manager detected on this OS. Use the ",
+          "manual download link below."
         ),
         if (sysname == "Linux") shiny::tags$small(
           class = "text-muted",
@@ -402,14 +414,46 @@ mod_setup_server <- function(id, state) {
       install_handle(handle)
     })
 
+    # Track when we launched, so we can bail on a hung install
+    # (brew triggering an Xcode CLT install dialog behind the browser;
+    # winget spawning a UAC elevation prompt the Shiny process can't
+    # answer). 10 minutes is generous for a real install and short
+    # enough that a hung one gets recovered without the user having
+    # to force-quit the app.
+    install_start_time <- shiny::reactiveVal(NULL)
+    INSTALL_TIMEOUT_SECS <- 600
+    shiny::observeEvent(input$install_run_now, {
+      install_start_time(Sys.time())
+    }, priority = 100)  # fires before the launch handler above
+
     # Poll the background install every 2s. When it finishes, bump
-    # ollama_refresh and tell the user.
+    # ollama_refresh and tell the user. Kill and warn if it blows the
+    # timeout.
     shiny::observe({
       h <- install_handle()
       if (is.null(h)) return()
       shiny::invalidateLater(2000, session)
+      started <- install_start_time()
+      if (!is.null(started) &&
+            as.numeric(Sys.time() - started, units = "secs") >
+              INSTALL_TIMEOUT_SECS &&
+            h$is_alive()) {
+        tryCatch(h$kill(), error = function(e) NULL)
+        install_handle(NULL); install_start_time(NULL)
+        shiny::showNotification(
+          paste0("Install did not finish within ",
+                 round(INSTALL_TIMEOUT_SECS / 60),
+                 " minutes and was cancelled. Common causes: brew is ",
+                 "waiting on an Xcode Command Line Tools dialog (macOS), ",
+                 "or winget is waiting on a UAC elevation prompt (Windows). ",
+                 "Run the command in a terminal so it can prompt you."),
+          type = "warning", duration = 15
+        )
+        return()
+      }
       if (!h$is_alive()) {
         exit <- tryCatch(h$get_exit_status(), error = function(e) NA_integer_)
+        install_start_time(NULL)
         if (identical(exit, 0L)) {
           shiny::showNotification("Ollama install finished.", duration = 5)
         } else {

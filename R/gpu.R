@@ -49,15 +49,38 @@ detect_gpu <- function() {
   # NVIDIA (Linux or Windows): nvidia-smi is installed with the CUDA
   # driver stack. Its exit code is 0 if a GPU is present and usable.
   if (nzchar(Sys.which("nvidia-smi"))) {
+    # Query name + total memory so a multi-GPU machine (e.g. a
+    # laptop with a Quadro K2200 driving the display plus an A100
+    # for inference, or two 4090s) picks the largest-VRAM device
+    # rather than silently reporting "the first line", which is
+    # typically the display card. Ollama itself uses the highest-
+    # VRAM device by default; align our detection with that.
     out <- try(
       suppressWarnings(system2("nvidia-smi",
-                                "--query-gpu=name --format=csv,noheader",
+                                "--query-gpu=name,memory.total --format=csv,noheader,nounits",
                                 stdout = TRUE, stderr = FALSE)),
       silent = TRUE
     )
-    if (!inherits(out, "try-error") && length(out) >= 1L && nzchar(out[1])) {
-      return(list(available = TRUE, kind = "nvidia",
-                  detail = paste("NVIDIA:", out[1])))
+    if (!inherits(out, "try-error") && length(out) >= 1L && any(nzchar(out))) {
+      parts <- strsplit(out, ",\\s*")
+      names <- vapply(parts, function(p) trimws(p[1]), character(1))
+      mem   <- suppressWarnings(as.numeric(
+        vapply(parts, function(p) trimws(p[2]), character(1))
+      ))
+      # Prefer the largest-VRAM GPU; if all queries returned NA
+      # (e.g. driver too old for memory.total), fall back to the
+      # first non-empty name.
+      pick <- if (any(!is.na(mem))) which.max(replace(mem, is.na(mem), -Inf))
+              else which(nzchar(names))[1L]
+      if (length(pick) == 1L && !is.na(pick)) {
+        detail <- if (length(names) > 1L) {
+          sprintf("NVIDIA: %s (of %d GPUs)", names[pick], length(names))
+        } else {
+          paste("NVIDIA:", names[pick])
+        }
+        return(list(available = TRUE, kind = "nvidia",
+                    detail = detail))
+      }
     }
   }
 

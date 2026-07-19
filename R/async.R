@@ -1,3 +1,26 @@
+# Parse a "started_at" timestamp string produced by
+# format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"). Base R's `as.POSIXct`
+# uses a locale-dependent heuristic that on some Windows builds
+# fails to recognise the `+HHMM` timezone suffix and silently
+# returns NA -- which made the elapsed/ETA display stay blank for
+# the whole run. Try the exact ISO-8601-with-numeric-offset format
+# first, then fall back to no-offset, then to whatever the heuristic
+# picks up. Always returns a POSIXct or NA of that class.
+#' @keywords internal
+parse_started_at <- function(x) {
+  if (is.null(x) || !nzchar(x)) return(as.POSIXct(NA))
+  # Format with numeric timezone offset (`%z`).
+  t <- suppressWarnings(as.POSIXct(x, format = "%Y-%m-%dT%H:%M:%S%z"))
+  if (!is.na(t)) return(t)
+  # Same shape without the offset (some locales emit "%z" as empty).
+  t <- suppressWarnings(as.POSIXct(x, format = "%Y-%m-%dT%H:%M:%S"))
+  if (!is.na(t)) return(t)
+  # Anything else: last-resort heuristic parse. Base R's method
+  # throws on genuinely unparseable input, so catch that too.
+  tryCatch(suppressWarnings(as.POSIXct(x)),
+           error = function(e) as.POSIXct(NA))
+}
+
 # Async ranking helpers.
 #
 # `rank_records()` is long-running (hours on a real corpus), and Shiny's
@@ -129,8 +152,8 @@ rank_job_status <- function(project) {
   }
   pct <- if (isTRUE(st$total > 0)) round(100 * st$processed / st$total, 1) else 0
   elapsed <- if (!is.null(st$started_at)) {
-    started <- try(as.POSIXct(st$started_at), silent = TRUE)
-    if (inherits(started, "POSIXct")) {
+    started <- parse_started_at(st$started_at)
+    if (inherits(started, "POSIXct") && !is.na(started)) {
       as.numeric(Sys.time() - started, units = "secs")
     } else NA_real_
   } else NA_real_
