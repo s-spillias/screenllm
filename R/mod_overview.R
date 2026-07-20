@@ -121,11 +121,26 @@ mod_overview_ui <- function(id) {
                             target = "_blank", "Report an issue"))
           ),
           shiny::tags$hr(class = "my-2"),
+          shiny::tags$p(class = "small text-muted mb-1",
+                        shiny::tags$strong("Cite screenllm:")),
           shiny::tags$p(
-            class = "small text-muted mb-0",
-            shiny::tags$strong("Cite:"), " Spillias, S. et al. (2026). ",
+            class = "small text-muted mb-2",
+            "Spillias, S. et al. (2026). ",
             shiny::tags$em("Operationalising LLM-assisted screening of literature to support systematic reviews."),
             " (in submission; preprint forthcoming)."
+          ),
+          shiny::tags$p(class = "small text-muted mb-1",
+                        shiny::tags$strong("Toy CBFM corpus + criteria are from:")),
+          shiny::tags$p(
+            class = "small text-muted mb-0",
+            "Spillias, S., Tuohy, P., Andreotta, M., Annand-Jones, R., ",
+            "Boschetti, F., Cvitanovic, C., Duggan, J., Fulton, E. A., ",
+            "Karcher, D. B., Paris, C., Shellock, R., & Trebilco, R. (2024). ",
+            shiny::tags$em("Human-AI collaboration to identify literature for evidence synthesis."),
+            " Cell Reports Sustainability, 1(7), 100132. ",
+            shiny::tags$a(href = "https://doi.org/10.1016/j.crsus.2024.100132",
+                          target = "_blank",
+                          "doi.org/10.1016/j.crsus.2024.100132")
           )
         )
       )

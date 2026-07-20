@@ -37,7 +37,13 @@ mod_corpus_ui <- function(id) {
         ", ", shiny::tags$code("title"), ", ", shiny::tags$code("abstract"),
         " column, plus (in the toy file only) a ",
         shiny::tags$code("human_decision"),
-        " column with ground-truth screening labels for benchmarking."
+        " column with ground-truth screening labels for benchmarking. ",
+        "Toy corpus + labels are from Spillias et al. (2024), ",
+        shiny::tags$em("Human-AI collaboration to identify literature for evidence synthesis"),
+        ", Cell Reports Sustainability, ",
+        shiny::tags$a(href = "https://doi.org/10.1016/j.crsus.2024.100132",
+                      target = "_blank", "doi.org/10.1016/j.crsus.2024.100132"),
+        "."
       ),
       shiny::hr(),
       shiny::uiOutput(ns("summary")),

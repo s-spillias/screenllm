@@ -454,3 +454,101 @@ pull_model <- function(model,
   if (ok && verbose) cli::cli_alert_success("Pulled {.val {model}}")
   invisible(ok)
 }
+
+#' Delete an Ollama model to free up disk space
+#'
+#' Wrapper around Ollama's `DELETE /api/delete` endpoint. Removes the
+#' model's blobs from the Ollama data directory. The operation is
+#' irreversible from the API side but the model can always be pulled
+#' back later with `pull_model()`.
+#'
+#' @param model Model tag (e.g. `"mistral:7b"`).
+#' @param ollama_url Base URL of the Ollama server.
+#' @param verbose Show progress messages.
+#' @return Invisible `TRUE` on success, `FALSE` if the API returned
+#'   a non-2xx status.
+#' @export
+delete_model <- function(model,
+                         ollama_url = getOption("screenllm.ollama_url"),
+                         verbose = getOption("screenllm.verbose", TRUE)) {
+  stopifnot(is.character(model), length(model) == 1L, nzchar(model))
+  if (verbose) cli::cli_alert_info("Deleting {.val {model}} from Ollama.")
+  # Ollama's delete endpoint expects a JSON body with `model` (older
+  # versions used `name`); send both to survive across releases. Use
+  # req_error(is_error = FALSE) so we can read the status code
+  # ourselves rather than have httr2 abort on 404 (model not
+  # installed) or 500.
+  resp <- try(
+    httr2::request(paste0(ollama_url, "/api/delete")) |>
+      httr2::req_method("DELETE") |>
+      httr2::req_body_json(list(model = model, name = model)) |>
+      httr2::req_timeout(60) |>
+      httr2::req_error(is_error = function(r) FALSE) |>
+      httr2::req_perform(),
+    silent = TRUE
+  )
+  if (inherits(resp, "try-error")) {
+    if (verbose) cli::cli_alert_danger(
+      "Delete failed: {conditionMessage(attr(resp, 'condition'))}"
+    )
+    return(invisible(FALSE))
+  }
+  ok <- httr2::resp_status(resp) >= 200L &&
+    httr2::resp_status(resp) < 300L
+  if (ok) {
+    if (verbose) cli::cli_alert_success("Deleted {.val {model}}.")
+  } else if (verbose) {
+    cli::cli_alert_danger("Delete returned HTTP {httr2::resp_status(resp)}.")
+  }
+  invisible(ok)
+}
+
+#' Installed Ollama models with disk-space metadata
+#'
+#' Like `ollama_installed_models()`, but returns a data.frame with
+#' one row per installed model and columns `name` and `size_bytes`
+#' -- suitable for a "manage models / free up disk space" UI.
+#'
+#' @param ollama_url Base URL of the Ollama server.
+#' @return A data.frame; zero rows if Ollama is unreachable or has
+#'   no models installed.
+#' @export
+ollama_installed_models_detail <- function(
+    ollama_url = getOption("screenllm.ollama_url")) {
+  resp <- try(
+    httr2::request(paste0(ollama_url, "/api/tags")) |>
+      httr2::req_timeout(5) |>
+      httr2::req_error(is_error = function(r) FALSE) |>
+      httr2::req_perform(),
+    silent = TRUE
+  )
+  empty <- data.frame(name = character(), size_bytes = numeric(),
+                      stringsAsFactors = FALSE)
+  if (inherits(resp, "try-error")) return(empty)
+  if (httr2::resp_status(resp) >= 400L) return(empty)
+  body <- tryCatch(
+    httr2::resp_body_json(resp, simplifyVector = TRUE),
+    error = function(e) NULL
+  )
+  if (is.null(body)) return(empty)
+  mods <- body$models
+  if (is.null(mods)) return(empty)
+  n_mods <- if (is.data.frame(mods)) nrow(mods) else length(mods)
+  if (n_mods == 0L) return(empty)
+  if (is.data.frame(mods)) {
+    data.frame(
+      name = as.character(mods$name),
+      size_bytes = as.numeric(mods$size %||% NA_real_),
+      stringsAsFactors = FALSE
+    )
+  } else {
+    data.frame(
+      name = vapply(mods, function(m) as.character(m$name %||% ""),
+                    character(1)),
+      size_bytes = vapply(mods,
+                          function(m) as.numeric(m$size %||% NA_real_),
+                          numeric(1)),
+      stringsAsFactors = FALSE
+    )
+  }
+}

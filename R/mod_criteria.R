@@ -176,39 +176,36 @@ mod_criteria_server <- function(id, state) {
       build_prompt(c, rec)
     })
 
-    # Example criteria matching the toy CBFM corpus. The dataset
-    # separates studies of wild-capture, community-based coastal
-    # fisheries in tropical / subtropical settings (accepts) from
-    # tangentially-related work such as aquaculture, ecotourism,
-    # non-fisheries species, or purely government-imposed spatial
-    # closures (rejects). These are illustrative, not authoritative;
-    # a real review would tighten them further.
-    cbfm_scope <- paste0(
-      "Empirical studies of community-based fisheries management ",
-      "(CBFM) in tropical or subtropical small-scale coastal or ",
-      "reef fisheries."
-    )
-    cbfm_inclusions <- c(
-      "The study focuses on wild-capture small-scale fisheries (excludes aquaculture, ecotourism, and non-fisheries species such as turtles or mammals).",
-      "The management approach is community-based, customary, or co-managed by local resource users -- not a purely government-imposed spatial closure.",
-      "The study reports empirical outcomes, evaluations, or a specific case study of a CBFM initiative (not opinion, editorial, or general policy commentary).",
-      "The setting is tropical or subtropical coastal or reef systems (Pacific Islands, Southeast Asia, Caribbean, tropical Latin America, or comparable)."
-    )
-
+    # Load the CBFM criteria from inst/extdata rather than hardcoding
+    # here. That file is the source of truth (the exact criteria from
+    # Spillias et al. 2024, Cell Reports Sustainability) and any
+    # edit to it flows through to the app.
     shiny::observeEvent(input$load_cbfm, {
-      shiny::updateTextAreaInput(session, "scope", value = cbfm_scope)
-      n_criteria(length(cbfm_inclusions))
-      stored_values(cbfm_inclusions)
+      spec <- tryCatch(load_toy_cbfm_criteria(),
+                       error = function(e) NULL)
+      if (is.null(spec)) {
+        shiny::showNotification(
+          "Could not load the CBFM example criteria file.",
+          type = "error", duration = 6
+        )
+        return()
+      }
+      shiny::updateTextAreaInput(session, "scope", value = spec$scope)
+      n_criteria(length(spec$inclusions))
+      stored_values(as.character(spec$inclusions))
       # The observer above rebuilds inclusions_ui when n_criteria
       # changes; also push each value in case the number of textareas
       # is unchanged (Shiny only re-renders when the count differs).
-      for (i in seq_along(cbfm_inclusions)) {
+      for (i in seq_along(spec$inclusions)) {
         shiny::updateTextAreaInput(session, sprintf("inc_%d", i),
-                                    value = cbfm_inclusions[[i]])
+                                    value = spec$inclusions[[i]])
       }
       shiny::showNotification(
-        "Loaded CBFM example criteria. Edit as needed, then Save.",
-        duration = 4, type = "message"
+        paste0(
+          "Loaded the CBFM example criteria from Spillias et al. ",
+          "(2024, Cell Reports Sustainability). Edit as needed, then Save."
+        ),
+        duration = 5, type = "message"
       )
     })
 

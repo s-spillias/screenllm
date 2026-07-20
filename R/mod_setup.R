@@ -70,7 +70,15 @@ mod_setup_ui <- function(id) {
           )
         ),
         shiny::actionButton(ns("pull_btn"), "Pull",
-                            class = "btn-sm btn-outline-primary")
+                            class = "btn-sm btn-outline-primary"),
+        # Manage-models trigger. Opens a modal listing every installed
+        # model with its on-disk size + a per-row Delete button, so
+        # users can free up space without dropping to a terminal.
+        shiny::actionButton(ns("manage_models_btn"),
+                            label = "",
+                            title = "Manage installed models (free up disk space)",
+                            class = "btn-sm btn-outline-secondary",
+                            icon = shiny::icon("hard-drive"))
       ),
       shiny::uiOutput(ns("pull_progress_ui")),
       # Ensemble card
@@ -653,6 +661,148 @@ mod_setup_server <- function(id, state) {
       tag <- trimws(input$pull_tag)
       if (!nzchar(tag)) return(NULL)
       start_and_track(tag)
+    })
+
+    # ---- Manage installed models modal --------------------------
+    # Trigger for a "confirm before delete" reactive; stashes the
+    # target model tag while we wait for the user to click through
+    # the confirm modal.
+    delete_target <- shiny::reactiveVal(NULL)
+
+    render_manage_body <- function() {
+      s <- ollama_state()
+      if (!isTRUE(s$up)) {
+        return(shiny::tags$div(
+          class = "alert alert-warning",
+          "Ollama isn't reachable, so we can't enumerate installed models. ",
+          "Start the daemon (or Refresh) and reopen this dialog."
+        ))
+      }
+      detail <- tryCatch(ollama_installed_models_detail(),
+                         error = function(e) NULL)
+      if (is.null(detail) || nrow(detail) == 0L) {
+        return(shiny::tags$em(class = "text-muted",
+                              "No models installed."))
+      }
+      detail <- detail[order(-detail$size_bytes), , drop = FALSE]
+      total_gb <- sum(detail$size_bytes, na.rm = TRUE) / 1e9
+      rows <- lapply(seq_len(nrow(detail)), function(i) {
+        tag <- detail$name[i]
+        sz  <- detail$size_bytes[i]
+        size_str <- if (is.na(sz)) "unknown size"
+                    else sprintf("~%.1f GB", sz / 1e9)
+        shiny::tags$li(
+          class = "list-group-item d-flex justify-content-between align-items-center py-2",
+          shiny::tags$div(
+            shiny::tags$code(tag),
+            shiny::tags$span(class = "text-muted small ms-2", size_str)
+          ),
+          shiny::actionButton(
+            ns(sprintf("del_model_%d", i)),
+            label = "Delete",
+            class = "btn-sm btn-outline-danger",
+            icon = shiny::icon("trash")
+          )
+        )
+      })
+      shiny::tagList(
+        shiny::tags$p(class = "small text-muted mb-2",
+                      sprintf("%d model%s installed, using ~%.1f GB on disk.",
+                              nrow(detail),
+                              if (nrow(detail) == 1L) "" else "s",
+                              total_gb)),
+        shiny::tags$ul(class = "list-group", rows),
+        shiny::tags$small(class = "text-muted d-block mt-2",
+                          "Deleting a model is instant and irreversible from Ollama's side. ",
+                          "You can always pull it back later.")
+      )
+    }
+
+    show_manage_modal <- function() {
+      shiny::showModal(shiny::modalDialog(
+        title = "Manage installed models",
+        shiny::uiOutput(ns("manage_models_body")),
+        footer = shiny::modalButton("Close"),
+        easyClose = TRUE, size = "l"
+      ))
+    }
+
+    output$manage_models_body <- shiny::renderUI({
+      render_manage_body()
+    })
+
+    shiny::observeEvent(input$manage_models_btn, {
+      # Force a refresh of ollama_state so the modal reflects the
+      # very latest state (e.g. a model that was pulled since the
+      # last poll).
+      ollama_refresh(shiny::isolate(ollama_refresh()) + 1L)
+      show_manage_modal()
+    })
+
+    # A single dynamic observer handles clicks on every per-row
+    # Delete button. We introspect the input list on each click to
+    # find which button fired -- a `for` loop over indices wouldn't
+    # work because the number of rows changes after each delete.
+    shiny::observe({
+      s <- ollama_state()
+      if (!isTRUE(s$up)) return()
+      detail <- tryCatch(ollama_installed_models_detail(),
+                         error = function(e) NULL)
+      if (is.null(detail) || nrow(detail) == 0L) return()
+      for (i in seq_len(nrow(detail))) {
+        local({
+          idx <- i
+          tag <- detail$name[idx]
+          shiny::observeEvent(input[[sprintf("del_model_%d", idx)]],
+                              ignoreInit = TRUE, {
+            delete_target(tag)
+            # Confirm dialog. We stack it on top of the manage modal
+            # so the user has clear visual context of what they're
+            # deleting.
+            shiny::showModal(shiny::modalDialog(
+              title = "Delete this model?",
+              shiny::tags$p("You're about to remove ",
+                            shiny::tags$code(tag),
+                            " from your local Ollama."),
+              shiny::tags$p(class = "small text-muted",
+                            "Freeing disk space. You can pull it back at any time."),
+              footer = shiny::tagList(
+                shiny::modalButton("Cancel"),
+                shiny::actionButton(ns("confirm_delete"),
+                                    "Delete permanently",
+                                    class = "btn-danger",
+                                    icon = shiny::icon("trash"))
+              ),
+              easyClose = TRUE
+            ))
+          }, once = FALSE)
+        })
+      }
+    })
+
+    shiny::observeEvent(input$confirm_delete, {
+      tag <- delete_target()
+      if (is.null(tag) || !nzchar(tag)) {
+        shiny::removeModal()
+        return()
+      }
+      shiny::removeModal()
+      ok <- tryCatch(delete_model(tag), error = function(e) FALSE)
+      if (isTRUE(ok)) {
+        shiny::showNotification(sprintf("Deleted %s.", tag),
+                                 type = "message", duration = 4)
+      } else {
+        shiny::showNotification(
+          sprintf("Failed to delete %s. See R console for details.", tag),
+          type = "error", duration = 6
+        )
+      }
+      delete_target(NULL)
+      # Bump the ollama_state refresh so every observer that lists
+      # installed models rebuilds. Reopen the modal so the user
+      # can continue deleting others.
+      ollama_refresh(shiny::isolate(ollama_refresh()) + 1L)
+      show_manage_modal()
     })
 
     # Shared launcher used by both pull-missing and pull-any.

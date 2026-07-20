@@ -160,6 +160,49 @@ build_prompt <- function(criteria, record) {
   )
 }
 
+#' Load the ready-made criteria for the toy CBFM corpus
+#'
+#' Reads `inst/extdata/toy_cbfm_criteria.R` (which mirrors the CBFM
+#' entry of the screening criteria used in Spillias et al. 2024,
+#' Cell Reports Sustainability) and returns a `screenllm_criteria`
+#' object ready to feed into `rank_records()`.
+#'
+#' Kept as a file the user can inspect / edit rather than
+#' hard-coding the criteria in the package, so a colleague can
+#' iterate on the demo criteria without touching R source.
+#'
+#' @return A `screenllm_criteria` object.
+#' @export
+#' @examples
+#' \dontrun{
+#' criteria <- load_toy_cbfm_criteria()
+#' criteria$scope
+#' criteria$inclusions
+#' }
+load_toy_cbfm_criteria <- function() {
+  path <- system.file("extdata", "toy_cbfm_criteria.R",
+                      package = "screenllm")
+  if (!nzchar(path) || !file.exists(path)) {
+    dev_path <- fs::path_wd("screenllm", "inst", "extdata",
+                            "toy_cbfm_criteria.R")
+    if (file.exists(dev_path)) path <- dev_path
+  }
+  if (!nzchar(path) || !file.exists(path)) {
+    cli::cli_abort("Could not locate toy_cbfm_criteria.R in the installed package.")
+  }
+  # Parent must be baseenv() (not emptyenv) so language primitives
+  # such as `<-`, `list()`, `c()`, `paste0()` used by the sourced
+  # file can be resolved. Using emptyenv() as parent would make the
+  # source fail with "could not find function '<-'".
+  env <- new.env(parent = baseenv())
+  sys.source(path, envir = env, keep.source = FALSE)
+  spec <- env$toy_cbfm_criteria
+  if (is.null(spec)) {
+    cli::cli_abort("toy_cbfm_criteria.R did not define `toy_cbfm_criteria`.")
+  }
+  define_criteria(scope = spec$scope, inclusions = spec$inclusions)
+}
+
 #' @keywords internal
 read_prompt_template <- function() {
   path <- system.file("prompts", "standard.txt", package = "screenllm")

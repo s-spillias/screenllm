@@ -1,8 +1,15 @@
 # Matching criteria for `toy_cbfm.csv`. Ships alongside the toy corpus
-# so users can reproduce a screening run end-to-end from the paper's
-# CBFM (community-based fisheries management) review.
+# so users can reproduce a screening run end-to-end from the CBFM
+# (community-based fisheries management) case study.
 #
-# From Spillias et al. (2026), screening_criteria.json.
+# Source: the screening criteria applied in the Human-AI Collaboration
+# paper --
+#   Spillias, S., Tuohy, P., Andreotta, M., Annand-Jones, R.,
+#   Boschetti, F., Cvitanovic, C., Duggan, J., Fulton, E. A.,
+#   Karcher, D. B., Paris, C., Shellock, R., & Trebilco, R. (2024).
+#   Human-AI collaboration to identify literature for evidence
+#   synthesis. Cell Reports Sustainability, 1(7), 100132.
+#   https://doi.org/10.1016/j.crsus.2024.100132
 
 toy_cbfm_criteria <- list(
   scope = paste0(
