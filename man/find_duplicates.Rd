@@ -9,7 +9,10 @@ find_duplicates(records, fuzzy = TRUE)
 \arguments{
 \item{records}{A tibble of records from \code{read_records()}.}
 
-\item{fuzzy}{Whether to fuzzy-match titles (Jaro-Winkler similarity= 0.95). Requires the stringdist package; falls back to exactnormalised-title match if stringdist is not installed.}
+\item{fuzzy}{Whether to fuzzy-match titles (Jaro-Winkler
+similarity of at least 0.95). Requires the \code{stringdist}
+package; falls back to exact normalised-title match if
+\code{stringdist} is not installed.}
 }
 \value{
 The input tibble with a new \code{duplicate_of} column.

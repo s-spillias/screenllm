@@ -54,6 +54,11 @@ parse_started_at <- function(x) {
 #' @param random_sample If sampling, whether to draw at random
 #'   (default `TRUE`) or take the first `sample_size` rows.
 #' @param seed Random seed used when `random_sample = TRUE`.
+#' @param force If `TRUE`, skip the concurrent-job safety check
+#'   (which aborts when the project's progress file was updated
+#'   within the last 60 s, suggesting another rank worker is live).
+#'   Use when you're sure the previous run is dead -- e.g. after a
+#'   force-quit R session -- and want to take over the project.
 #' @return A list with `pid` (the worker PID) and `handle` (the callr
 #'   process object).
 #' @export

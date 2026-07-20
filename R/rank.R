@@ -178,10 +178,20 @@ rank_records <- function(records,
   # discarding hours of scoring right at the aggregation step. Use
   # a per-element accessor that returns NA on a missing/wrong-length
   # value instead.
+  # Use base coercers directly rather than methods::as() so we don't
+  # need to depend on the methods S4 machinery for a tiny helper.
   pick <- function(s, key, type, default) {
     v <- s[[key]]
     if (is.null(v) || length(v) != 1L) return(default)
-    tryCatch(as(v, type), error = function(e) default)
+    tryCatch(
+      switch(type,
+             character = as.character(v),
+             integer   = as.integer(v),
+             numeric   = as.numeric(v),
+             default),
+      error = function(e) default,
+      warning = function(w) default
+    )
   }
   long <- tibble::tibble(
     id = vapply(scores, function(s) pick(s, "id", "character", NA_character_),

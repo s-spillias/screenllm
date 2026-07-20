@@ -6,7 +6,7 @@
 \usage{
 backend_ollama(
   ollama_url = getOption("screenllm.ollama_url"),
-  timeout = 300,
+  timeout = 600,
   max_retries = 3L
 )
 }

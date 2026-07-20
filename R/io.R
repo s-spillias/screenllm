@@ -231,9 +231,10 @@ read_ris_records <- function(path) {
 #' before ranking avoids scoring the same abstract three or four times.
 #'
 #' @param records A tibble of records from `read_records()`.
-#' @param fuzzy Whether to fuzzy-match titles (Jaro-Winkler similarity
-#'   >= 0.95). Requires the `stringdist` package; falls back to exact
-#'   normalised-title match if `stringdist` is not installed.
+#' @param fuzzy Whether to fuzzy-match titles (Jaro-Winkler
+#'   similarity of at least 0.95). Requires the `stringdist`
+#'   package; falls back to exact normalised-title match if
+#'   `stringdist` is not installed.
 #' @return The input tibble with a new `duplicate_of` column.
 #' @export
 #' @examples

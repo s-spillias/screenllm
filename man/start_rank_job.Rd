@@ -9,7 +9,8 @@ start_rank_job(
   ensemble = default_ensemble(),
   sample_size = NULL,
   random_sample = TRUE,
-  seed = 1L
+  seed = 1L,
+  force = FALSE
 )
 }
 \arguments{
@@ -26,6 +27,12 @@ before ranking. \code{NULL} (default) or \code{0} = all records.}
 (default \code{TRUE}) or take the first \code{sample_size} rows.}
 
 \item{seed}{Random seed used when \code{random_sample = TRUE}.}
+
+\item{force}{If \code{TRUE}, skip the concurrent-job safety check
+(which aborts when the project's progress file was updated
+within the last 60 s, suggesting another rank worker is live).
+Use when you're sure the previous run is dead -- e.g. after a
+force-quit R session -- and want to take over the project.}
 }
 \value{
 A list with \code{pid} (the worker PID) and \code{handle} (the callr
