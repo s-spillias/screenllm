@@ -15,7 +15,13 @@ mod_setup_ui <- function(id) {
           shiny::selectizeInput(
             ns("project_select"), NULL,
             choices = NULL,
-            options = list(placeholder = "(select existing project)")
+            # dropdownParent = 'body' portals the popup to document.body
+            # so it isn't clipped by the enclosing card's overflow:hidden
+            # (which bslib::card sets to keep rounded corners clean).
+            # Without this the tail of a long project list is invisible
+            # behind the card's bottom edge.
+            options = list(placeholder = "(select existing project)",
+                            dropdownParent = "body")
           ),
           shiny::fluidRow(
             shiny::column(
@@ -57,7 +63,8 @@ mod_setup_ui <- function(id) {
             options = list(
               create = TRUE, createOnBlur = TRUE,
               placeholder = "pick from list or type any Ollama tag",
-              persist = FALSE
+              persist = FALSE,
+              dropdownParent = "body"
             ),
             width = "100%"
           )

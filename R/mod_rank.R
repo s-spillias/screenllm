@@ -73,7 +73,8 @@ mod_rank_ui <- function(id) {
           shiny::selectizeInput(
             ns("clear_model"), NULL, choices = NULL,
             options = list(placeholder = "select a model or 'all'",
-                            create = FALSE)
+                            create = FALSE,
+                            dropdownParent = "body")
           ),
           shiny::actionButton(ns("clear_cache_btn"),
                                "Clear + delete ranking",
