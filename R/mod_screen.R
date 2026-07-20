@@ -10,6 +10,11 @@ mod_screen_ui <- function(id) {
       bslib::card_header("Records to screen"),
       shiny::checkboxInput(ns("hide_done"),
                             "Hide records I've already decided", value = TRUE),
+      # Rendered non-empty only when the user has actually screened
+      # everything above the stop point AND "hide already decided"
+      # is on -- so the table below is empty for a helpful reason,
+      # not because the plan is empty or the user is confused.
+      shiny::uiOutput(ns("done_banner")),
       DT::DTOutput(ns("records_table"))
     ),
     bslib::card(
@@ -96,6 +101,37 @@ mod_screen_server <- function(id, state) {
     active <- shiny::reactive({
       v <- visible(); if (is.null(v) || nrow(v) == 0L) return(NULL)
       v[min(current(), nrow(v)), , drop = FALSE]
+    })
+
+    # True when the user has decided every record in the plan (so
+    # visible() with hide_done ON is empty, but the underlying plan
+    # is not).
+    all_done <- shiny::reactive({
+      full <- to_screen_df()
+      if (is.null(full) || nrow(full) == 0L) return(FALSE)
+      dec_ids <- decisions_df()$id
+      all(full$id %in% dec_ids)
+    })
+
+    output$done_banner <- shiny::renderUI({
+      if (!isTRUE(input$hide_done)) return(NULL)
+      if (!isTRUE(all_done())) return(NULL)
+      full <- to_screen_df()
+      n <- if (is.null(full)) 0L else nrow(full)
+      shiny::div(
+        class = "alert alert-success d-flex align-items-center gap-2 py-2 px-3 mb-2",
+        role = "alert",
+        shiny::icon("circle-check"),
+        shiny::tags$div(
+          shiny::tags$strong("All screened."),
+          sprintf(" You've recorded a decision on all %d record%s ", n,
+                  if (n == 1L) "" else "s"),
+          "in the plan.",
+          shiny::tags$br(),
+          shiny::tags$small(class = "text-muted",
+                            "Untick \"Hide records I've already decided\" to review or change any decision.")
+        )
+      )
     })
 
     output$records_table <- DT::renderDT({

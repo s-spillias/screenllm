@@ -56,13 +56,18 @@ mod_report_ui <- function(id) {
       )
     ),
     # ---- Right column: selected-record review -------------------
-    # card_body uses flex-column so the middle section can scroll
-    # while the action footer stays pinned at the bottom.
+    # Card gets a bounded height so its inner flex column can
+    # constrain the scrollable middle section; without a bounded
+    # height, `flex-grow: 1` + `overflow-y: auto` has nothing to
+    # push against and the buttons drift below the fold with the
+    # content. 75vh keeps the whole card in view on typical laptop
+    # screens while still leaving room for the navbar.
     bslib::card(
+      height = "75vh",
       bslib::card_header("Review selected record"),
       bslib::card_body(
         class = "d-flex flex-column p-3",
-        style = "min-height: 600px;",
+        style = "min-height: 0;",
         # Scrolling body: badges, abstract, per-model justifications.
         shiny::div(
           class = "flex-grow-1",
@@ -71,7 +76,7 @@ mod_report_ui <- function(id) {
         ),
         # Sticky footer: change-decision buttons, always visible.
         shiny::div(
-          class = "border-top pt-2 mt-2 bg-body",
+          class = "border-top pt-2 mt-2 bg-body flex-shrink-0",
           shiny::uiOutput(ns("review_actions"))
         )
       )
