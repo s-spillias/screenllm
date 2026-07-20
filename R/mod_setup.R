@@ -85,14 +85,15 @@ mod_setup_ui <- function(id) {
             "in the background so you can keep using the app."
           )
         ),
-        # Manage-models trigger. Opens a modal listing every installed
-        # model with its on-disk size + a per-row Delete button, so
-        # users can free up space without dropping to a terminal.
+        # Delete-models trigger. Opens a modal listing every installed
+        # model with its on-disk size; user picks one to delete.
+        # (Icon-only was too subtle -- colleagues didn't realise it
+        # could be used to free up disk space.)
         shiny::actionButton(ns("manage_models_btn"),
-                            label = "",
-                            title = "Manage installed models (free up disk space)",
-                            class = "btn-sm btn-outline-secondary",
-                            icon = shiny::icon("hard-drive"))
+                            label = "Delete Models",
+                            title = "Remove installed models to free up disk space",
+                            class = "btn-sm btn-outline-danger",
+                            icon = shiny::icon("trash"))
       ),
       shiny::uiOutput(ns("pull_progress_ui")),
       # Ensemble card
