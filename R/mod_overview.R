@@ -125,7 +125,9 @@ mod_overview_ui <- function(id) {
                         shiny::tags$strong("Cite screenllm:")),
           shiny::tags$p(
             class = "small text-muted mb-2",
-            "Spillias, S. et al. (2026). ",
+            "Spillias, S., Avila Turriago, L., Brown, C., Easton, A., ",
+            "Roberts, J., Sievers, M., Swearer, S., Taylor, A., Wright, B., ",
+            "& Komyakova, V. (2026). ",
             shiny::tags$em("Operationalising LLM-assisted screening of literature to support systematic reviews."),
             " (in submission; preprint forthcoming)."
           ),

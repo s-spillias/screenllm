@@ -2,7 +2,17 @@ Package: screenllm
 Title: LLM-Assisted Title/Abstract Screening for Systematic Reviews
 Version: 0.1.0
 Authors@R: c(
-    person("Scott", "Spillias", email = "scott.spillias@csiro.au", role = c("aut", "cre")))
+    person("Scott", "Spillias", email = "scott.spillias@csiro.au",
+           role = c("aut", "cre")),
+    person("Laura", "Avila Turriago", role = "aut"),
+    person("Christopher", "Brown", role = "aut"),
+    person("Ariane", "Easton", role = "aut"),
+    person("Jack", "Roberts", role = "aut"),
+    person("Michael", "Sievers", role = "aut"),
+    person("Steve", "Swearer", role = "aut"),
+    person("Andrew", "Taylor", role = "aut"),
+    person("Brigette", "Wright", role = "aut"),
+    person("Valeriya", "Komyakova", role = "aut"))
 Description: A turn-key workflow for LLM-assisted systematic-review screening.
     The package ranks a corpus of titles and abstracts with an ensemble of
     open-source large language models served locally by Ollama, then applies
