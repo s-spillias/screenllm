@@ -4,46 +4,76 @@
 #' @keywords internal
 mod_report_ui <- function(id) {
   ns <- shiny::NS(id)
+  # Compact download button style used throughout the left column so
+  # the summary + downloads + disagreements all fit above the fold.
+  dl_class <- "btn-sm btn-outline-secondary"
   bslib::layout_columns(
     col_widths = c(5, 7),
-    bslib::card(
-      bslib::card_header("Summary"),
-      shiny::uiOutput(ns("summary")),
-      shiny::hr(),
-      shiny::downloadButton(ns("dl_decisions"), "Download decisions.csv"),
-      shiny::downloadButton(ns("dl_ranked"), "Download ranked corpus (CSV)"),
-      shiny::downloadButton(ns("dl_report"), "Download report (RDS)"),
-      shiny::downloadButton(ns("dl_html"), "Download HTML report"),
-      shiny::helpText(shiny::em(
-        "The HTML report is a self-contained document; open it in a ",
-        "browser and use Print > Save as PDF to archive."
-      ))
+    # ---- Left column: Summary, downloads, disagreements ---------
+    shiny::tagList(
+      bslib::card(
+        bslib::card_header("Summary"),
+        shiny::uiOutput(ns("summary")),
+        shiny::tags$hr(class = "my-2"),
+        shiny::tags$small(class = "text-muted d-block mb-1", "Downloads:"),
+        shiny::div(
+          class = "d-flex flex-wrap gap-1",
+          shiny::downloadButton(ns("dl_decisions"), "Decisions",
+                                 class = dl_class,
+                                 icon = shiny::icon("file-csv")),
+          shiny::downloadButton(ns("dl_ranked"), "Ranked",
+                                 class = dl_class,
+                                 icon = shiny::icon("file-csv")),
+          shiny::downloadButton(ns("dl_report"), "Report",
+                                 class = dl_class,
+                                 icon = shiny::icon("file-code")),
+          shiny::downloadButton(ns("dl_html"), "HTML",
+                                 class = dl_class,
+                                 icon = shiny::icon("file-lines"))
+        ),
+        shiny::tags$small(class = "text-muted d-block mt-1",
+                          "HTML report opens in a browser; use Print > Save as PDF to archive.")
+      ),
+      bslib::card(
+        bslib::card_header("Strong LLM-human disagreements"),
+        shiny::helpText(shiny::em(
+          "Records where the ensemble was confident but the human decided the ",
+          "opposite. Worth a manual look; on one of the paper's benchmark ",
+          "reviews, a similar audit caught legitimate reviewer errors in 28% of these."
+        )),
+        shiny::div(
+          class = "clearfix",
+          DT::DTOutput(ns("audit_table"))
+        ),
+        shiny::div(
+          class = "d-flex align-items-center gap-2 mt-2",
+          shiny::downloadButton(ns("dl_audit"), "Disagreements",
+                                 class = dl_class,
+                                 icon = shiny::icon("file-csv")),
+          shiny::tags$small(class = "text-muted ms-2",
+                            "Click a row to review the record on the right.")
+        )
+      )
     ),
+    # ---- Right column: selected-record review -------------------
+    # card_body uses flex-column so the middle section can scroll
+    # while the action footer stays pinned at the bottom.
     bslib::card(
-      bslib::card_header("Strong LLM-human disagreements"),
-      shiny::helpText(shiny::em(
-        "Records where the ensemble was confident but the human decided the ",
-        "opposite. Worth a manual look; on one of the paper's benchmark ",
-        "reviews, a similar audit caught legitimate reviewer errors in 28% of these."
-      )),
-      # Wrap DT in a clearfix so its info row doesn't stack over
-      # the review panel below.
-      shiny::div(
-        class = "clearfix",
-        DT::DTOutput(ns("audit_table"))
-      ),
-      shiny::div(
-        class = "d-flex align-items-center gap-2 mt-2",
-        shiny::downloadButton(ns("dl_audit"),
-                               "Download disagreements.csv",
-                               class = "btn-sm btn-outline-secondary"),
-        shiny::tags$small(class = "text-muted ms-2",
-                          "Click a row to review the record and change your decision.")
-      ),
-      shiny::tags$hr(class = "my-2"),
-      shiny::div(
-        style = "max-height: 380px; overflow-y: auto; overflow-x: hidden;",
-        shiny::uiOutput(ns("review_panel"))
+      bslib::card_header("Review selected record"),
+      bslib::card_body(
+        class = "d-flex flex-column p-3",
+        style = "min-height: 600px;",
+        # Scrolling body: badges, abstract, per-model justifications.
+        shiny::div(
+          class = "flex-grow-1",
+          style = "overflow-y: auto; min-height: 0;",
+          shiny::uiOutput(ns("review_body"))
+        ),
+        # Sticky footer: change-decision buttons, always visible.
+        shiny::div(
+          class = "border-top pt-2 mt-2 bg-body",
+          shiny::uiOutput(ns("review_actions"))
+        )
       )
     )
   )
@@ -167,30 +197,42 @@ mod_report_server <- function(id, state) {
       }
     })
 
-    output$review_panel <- shiny::renderUI({
+    # Shared accessor: returns list(rec = <1-row>, current_dec = <chr>)
+    # or NULL when nothing selectable. Used by both the scrollable
+    # body and the pinned actions so they stay in sync.
+    selected_record <- shiny::reactive({
       sid <- selected_id()
-      if (is.null(sid)) {
-        return(shiny::tags$p(
-          class = "text-muted fst-italic small mt-2",
-          "Select a row above to review this record and (if you want) ",
-          "change your decision."
-        ))
-      }
+      if (is.null(sid)) return(NULL)
       r <- state$ranked
       if (is.null(r)) return(NULL)
       idx <- which(r$id == sid)
-      if (length(idx) == 0L) {
-        return(shiny::tags$p(class = "text-muted fst-italic small mt-2",
-                             "(record not found)"))
-      }
+      if (length(idx) == 0L) return(NULL)
       rec <- r[idx[1L], ]
       # Current human decision (from state$decisions, not the ranked
       # ground truth column).
-      current_dec <- {
-        d <- normalise_decisions_shape(state$decisions)
-        val <- d$human_decision[d$id == sid]
-        if (length(val) == 0L || is.na(val[1])) NA_character_ else val[1]
+      d <- normalise_decisions_shape(state$decisions)
+      val <- d$human_decision[d$id == sid]
+      current_dec <- if (length(val) == 0L || is.na(val[1])) {
+        NA_character_
+      } else val[1]
+      list(rec = rec, current_dec = current_dec)
+    })
+
+    # ---- Scrolling body: badges, abstract, per-model justifications
+    output$review_body <- shiny::renderUI({
+      sel <- selected_record()
+      if (is.null(sel)) {
+        return(shiny::tags$p(
+          class = "text-muted fst-italic small",
+          "Select a row from the disagreements table to review this ",
+          "record and (if you want) change your decision. The Change ",
+          "to Accept / Reject buttons stay pinned below so you can ",
+          "scroll through the per-model justifications and act ",
+          "without losing them."
+        ))
       }
+      rec <- sel$rec
+      current_dec <- sel$current_dec
       dec_badge <- if (is.na(current_dec)) {
         shiny::tags$span(class = "badge bg-secondary", "not screened")
       } else if (current_dec == "Accept") {
@@ -225,18 +267,15 @@ mod_report_server <- function(id, state) {
           )
         })
       }
-      # Only offer the "flip" button (the opposite of the current
-      # decision); leave the current-choice button as a no-op
-      # confirm.
       shiny::tagList(
         shiny::tags$div(
           class = "mb-2",
           shiny::tags$span(class = "badge bg-primary me-2",
                            sprintf("LLM score %.0f", rec$universal_best_score)),
-          dec_badge,
-          shiny::tags$span(class = "ms-2 fw-semibold small",
-                           substr(rec$title %||% "", 1, 200))
+          dec_badge
         ),
+        shiny::tags$div(class = "fw-semibold mb-1",
+                        rec$title %||% ""),
         shiny::tags$p(
           class = "small text-break text-wrap mb-2",
           substr(rec$abstract %||% "", 1, 1500),
@@ -244,17 +283,27 @@ mod_report_server <- function(id, state) {
         ),
         shiny::tags$small(class = "text-muted d-block mb-1",
                           "Per-model justifications:"),
-        panels,
-        shiny::tags$hr(class = "my-2"),
-        shiny::tags$div(
-          class = "d-flex gap-2 justify-content-end",
-          shiny::actionButton(ns("flip_accept"), "Change to Accept",
-                              class = "btn-success btn-sm",
-                              icon = shiny::icon("check")),
-          shiny::actionButton(ns("flip_reject"), "Change to Reject",
-                              class = "btn-danger btn-sm",
-                              icon = shiny::icon("xmark"))
-        )
+        panels
+      )
+    })
+
+    # ---- Pinned action footer: Accept / Reject buttons ----------
+    output$review_actions <- shiny::renderUI({
+      sel <- selected_record()
+      if (is.null(sel)) {
+        return(shiny::tags$small(
+          class = "text-muted fst-italic",
+          "No record selected."
+        ))
+      }
+      shiny::tags$div(
+        class = "d-flex gap-2 justify-content-end",
+        shiny::actionButton(ns("flip_accept"), "Change to Accept",
+                            class = "btn-success btn-sm",
+                            icon = shiny::icon("check")),
+        shiny::actionButton(ns("flip_reject"), "Change to Reject",
+                            class = "btn-danger btn-sm",
+                            icon = shiny::icon("xmark"))
       )
     })
 

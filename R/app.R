@@ -79,6 +79,15 @@ app_ui <- function() {
     id = "main_navbar",
     theme = bslib::bs_theme(preset = "shiny"),
     fillable = TRUE,
+    # Selectize's default dropdown caps at ~200px, which on a busy
+    # user's project list would hide anything past project #6 or 7
+    # behind an internal scroll. Lift the cap so the whole list is
+    # visible when the popup opens, and let the picker itself be
+    # taller when the user opens it. Applies to every selectize
+    # instance in the app (project picker, model pull, etc.).
+    shiny::tags$head(shiny::tags$style(shiny::HTML(
+      ".selectize-dropdown-content { max-height: 400px !important; }"
+    ))),
     bslib::nav_panel("1. Setup", mod_setup_ui("setup")),
     bslib::nav_panel("2. Corpus", mod_corpus_ui("corpus")),
     bslib::nav_panel("3. Criteria", mod_criteria_ui("criteria")),
