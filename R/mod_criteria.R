@@ -19,7 +19,18 @@ mod_criteria_ui <- function(id) {
                                              class = "btn-outline-secondary"))
       ),
       shiny::hr(),
-      shiny::actionButton(ns("save"), "Save criteria", class = "btn-success"),
+      shiny::div(
+        class = "d-flex align-items-center gap-2 flex-wrap",
+        shiny::actionButton(ns("save"), "Save criteria",
+                            class = "btn-success"),
+        shiny::actionButton(ns("load_cbfm"),
+                            "Load CBFM example criteria",
+                            class = "btn-outline-secondary btn-sm",
+                            title = paste0("Populate the scope + inclusions with the ",
+                                            "example criteria matching the toy CBFM ",
+                                            "corpus, so you can run a real end-to-end ",
+                                            "demo without inventing your own criteria."))
+      ),
       shiny::tags$small(
         shiny::textOutput(ns("autosave_indicator"), inline = TRUE),
         class = "text-muted ms-2"
@@ -163,6 +174,42 @@ mod_criteria_server <- function(id, state) {
                    abstract = "")
       }
       build_prompt(c, rec)
+    })
+
+    # Example criteria matching the toy CBFM corpus. The dataset
+    # separates studies of wild-capture, community-based coastal
+    # fisheries in tropical / subtropical settings (accepts) from
+    # tangentially-related work such as aquaculture, ecotourism,
+    # non-fisheries species, or purely government-imposed spatial
+    # closures (rejects). These are illustrative, not authoritative;
+    # a real review would tighten them further.
+    cbfm_scope <- paste0(
+      "Empirical studies of community-based fisheries management ",
+      "(CBFM) in tropical or subtropical small-scale coastal or ",
+      "reef fisheries."
+    )
+    cbfm_inclusions <- c(
+      "The study focuses on wild-capture small-scale fisheries (excludes aquaculture, ecotourism, and non-fisheries species such as turtles or mammals).",
+      "The management approach is community-based, customary, or co-managed by local resource users -- not a purely government-imposed spatial closure.",
+      "The study reports empirical outcomes, evaluations, or a specific case study of a CBFM initiative (not opinion, editorial, or general policy commentary).",
+      "The setting is tropical or subtropical coastal or reef systems (Pacific Islands, Southeast Asia, Caribbean, tropical Latin America, or comparable)."
+    )
+
+    shiny::observeEvent(input$load_cbfm, {
+      shiny::updateTextAreaInput(session, "scope", value = cbfm_scope)
+      n_criteria(length(cbfm_inclusions))
+      stored_values(cbfm_inclusions)
+      # The observer above rebuilds inclusions_ui when n_criteria
+      # changes; also push each value in case the number of textareas
+      # is unchanged (Shiny only re-renders when the count differs).
+      for (i in seq_along(cbfm_inclusions)) {
+        shiny::updateTextAreaInput(session, sprintf("inc_%d", i),
+                                    value = cbfm_inclusions[[i]])
+      }
+      shiny::showNotification(
+        "Loaded CBFM example criteria. Edit as needed, then Save.",
+        duration = 4, type = "message"
+      )
     })
 
     shiny::observeEvent(input$save, {

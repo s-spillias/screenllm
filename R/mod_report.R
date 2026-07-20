@@ -352,9 +352,29 @@ mod_report_server <- function(id, state) {
       filename = function() "ranked.csv",
       content = function(file) {
         r <- state$ranked; if (is.null(r)) return()
-        # Drop list-columns before writing to CSV.
+        # Drop list-columns; can't round-trip through CSV.
         drop <- intersect(c("per_model_scores", "justifications"), names(r))
-        utils::write.csv(r[, setdiff(names(r), drop)], file, row.names = FALSE)
+        r <- r[, setdiff(names(r), drop), drop = FALSE]
+        # Some corpora (the toy CBFM CSV, real users' pre-screened
+        # exports) ship with ground-truth `human_decision` / `note` /
+        # `timestamp` columns already populated on every row. That
+        # column rode through unchanged into the downloaded ranked
+        # CSV -- users then saw 40/40 rows labelled Accept/Reject
+        # even though they'd only screened 9 in the Screen tab.
+        # Rename the incoming one to `ground_truth_decision` so its
+        # provenance is unambiguous, then join the user's actual
+        # decisions in as `human_decision` (only populated for rows
+        # the reviewer has actually seen).
+        rename <- intersect(c("human_decision", "note", "timestamp"), names(r))
+        if (length(rename) > 0L) {
+          names(r)[match(rename, names(r))] <-
+            paste0("ground_truth_", rename)
+        }
+        user_dec <- normalise_decisions_shape(state$decisions)
+        user_dec <- user_dec[, c("id", "human_decision", "note",
+                                  "timestamp"), drop = FALSE]
+        r <- dplyr::left_join(r, user_dec, by = "id")
+        utils::write.csv(r, file, row.names = FALSE, na = "")
       }
     )
 

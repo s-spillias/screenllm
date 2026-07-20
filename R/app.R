@@ -88,6 +88,7 @@ app_ui <- function() {
     shiny::tags$head(shiny::tags$style(shiny::HTML(
       ".selectize-dropdown-content { max-height: 400px !important; }"
     ))),
+    bslib::nav_panel("Overview", mod_overview_ui("overview")),
     bslib::nav_panel("1. Setup", mod_setup_ui("setup")),
     bslib::nav_panel("2. Corpus", mod_corpus_ui("corpus")),
     bslib::nav_panel("3. Criteria", mod_criteria_ui("criteria")),
@@ -125,6 +126,7 @@ app_server <- function(input, output, session, initial_project = NULL) {
     if (is.null(state$project)) "no project" else paste0("project: ", state$project)
   })
 
+  mod_overview_server("overview", state = state)
   mod_setup_server("setup", state = state)
   mod_corpus_server("corpus", state = state)
   mod_criteria_server("criteria", state = state)

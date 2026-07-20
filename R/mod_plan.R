@@ -3,18 +3,68 @@
 #' @keywords internal
 mod_plan_ui <- function(id) {
   ns <- shiny::NS(id)
+  # Small helper: build a label with an inline (?) tooltip icon.
+  # Users unfamiliar with the SAFE stopping rule found the raw
+  # slider labels ("Target recall", "Minimum coverage", ...) hard to
+  # interpret. Each label now carries a hoverable explanation that
+  # names the intuition, not just the definition.
+  labelled <- function(text, tip) {
+    shiny::tagList(
+      text,
+      bslib::tooltip(
+        shiny::tags$i(class = "fa-solid fa-circle-question text-muted ms-1",
+                      style = "cursor: help;"),
+        tip,
+        placement = "right"
+      )
+    )
+  }
   bslib::layout_columns(
     col_widths = c(4, 8),
     bslib::card(
       bslib::card_header("SAFE settings"),
-      shiny::sliderInput(ns("target_recall"), "Target recall:",
-                         min = 0.80, max = 0.99, value = 0.95, step = 0.01),
-      shiny::sliderInput(ns("min_cover"), "Minimum coverage:",
-                         min = 0.05, max = 0.90, value = 0.50, step = 0.05),
-      shiny::sliderInput(ns("run_length"), "Consecutive-negative run length:",
-                         min = 5L, max = 500L, value = 50L, step = 5L),
-      shiny::numericInput(ns("spot_check_n"), "Spot-check size (n):",
-                          value = 200, min = 20, max = 1000),
+      shiny::tags$p(
+        class = "small text-muted mb-2",
+        "SAFE is the stopping rule from Callaghan & Muller-Hansen (2020) ",
+        "adapted for ensemble-ranked corpora. It stops screening once ",
+        "three gates all agree that further reading is unlikely to find ",
+        "more accepts. Hover the (?) next to each setting for details."
+      ),
+      shiny::sliderInput(
+        ns("target_recall"),
+        labelled("Target recall:", paste0(
+          "The fraction of relevant papers you want to catch. 0.95 ",
+          "means the SAFE rule aims to have found at least 95% of the ",
+          "true accepts before it stops. Higher = safer but more work."
+        )),
+        min = 0.80, max = 0.99, value = 0.95, step = 0.01),
+      shiny::sliderInput(
+        ns("min_cover"),
+        labelled("Minimum coverage:", paste0(
+          "The fraction of the corpus that MUST be screened before ",
+          "SAFE will even consider stopping. A safety floor: without ",
+          "it a lucky run of early rejects could stop screening on a ",
+          "5% sample. 0.50 = at least half the corpus."
+        )),
+        min = 0.05, max = 0.90, value = 0.50, step = 0.05),
+      shiny::sliderInput(
+        ns("run_length"),
+        labelled("Consecutive-negative run length:", paste0(
+          "Number of rejects in a row SAFE must observe before it ",
+          "will consider stopping. Guards against stopping mid-way ",
+          "through a cluster of borderline accepts. Higher = more ",
+          "cautious. Default 50."
+        )),
+        min = 5L, max = 500L, value = 50L, step = 5L),
+      shiny::numericInput(
+        ns("spot_check_n"),
+        labelled("Spot-check size (n):", paste0(
+          "Number of records to sample from below the stop point and ",
+          "double-check for missed accepts. Only fires if some records ",
+          "below the proposed stop point carry a known label. Set to 0 ",
+          "to skip."
+        )),
+        value = 200, min = 20, max = 1000),
       shiny::actionButton(ns("save"), "Save plan", class = "btn-success")
     ),
     bslib::card(

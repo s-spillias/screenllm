@@ -21,8 +21,24 @@ mod_corpus_ui <- function(id) {
         " / ", shiny::tags$code("AB"), ")."
       ),
       shiny::hr(),
-      shiny::actionButton(ns("use_toy"), "Or load the toy CBFM corpus",
-                          class = "btn-outline-secondary"),
+      shiny::tags$small(class = "text-muted d-block mb-1",
+                        "Try it with the built-in toy corpus:"),
+      shiny::div(
+        class = "d-flex gap-2 flex-wrap",
+        shiny::actionButton(ns("use_toy"), "Load toy CBFM corpus",
+                            class = "btn-outline-secondary btn-sm"),
+        shiny::downloadButton(ns("dl_toy"), "Download toy CBFM (CSV)",
+                              class = "btn-outline-secondary btn-sm",
+                              icon = shiny::icon("file-csv"))
+      ),
+      shiny::tags$small(
+        class = "text-muted d-block mt-1",
+        "The CSV shows the expected input format: an ", shiny::tags$code("id"),
+        ", ", shiny::tags$code("title"), ", ", shiny::tags$code("abstract"),
+        " column, plus (in the toy file only) a ",
+        shiny::tags$code("human_decision"),
+        " column with ground-truth screening labels for benchmarking."
+      ),
       shiny::hr(),
       shiny::uiOutput(ns("summary")),
       shiny::uiOutput(ns("dup_banner"))
@@ -188,6 +204,24 @@ mod_corpus_server <- function(id, state) {
       )
       dup_flag(list(skipped = FALSE, n_dup = 0L))
     })
+
+    output$dl_toy <- shiny::downloadHandler(
+      filename = function() "toy_cbfm.csv",
+      content = function(file) {
+        toy_path <- system.file("extdata", "toy_cbfm.csv",
+                                package = "screenllm")
+        if (!nzchar(toy_path)) {
+          # Rare: source-install without the installed data path.
+          # Fail loudly rather than write an empty file.
+          shiny::showNotification(
+            "Could not locate the toy corpus inside the installed package.",
+            type = "error", duration = 6
+          )
+          return()
+        }
+        file.copy(toy_path, file, overwrite = TRUE)
+      }
+    )
 
     output$preview <- DT::renderDT({
       r <- state$records

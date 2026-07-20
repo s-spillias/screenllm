@@ -1,10 +1,8 @@
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  # Manual trigger keeps macOS coverage available on demand (e.g. the
-  # week before a CRAN submission) without paying for it on every push.
+  # CI is manual-only. Automatic push/PR triggers were burning the
+  # 2000 min/month Actions quota during rapid fixup sweeps (a
+  # macOS-latest cell alone costs 10x the wall-clock time). To run
+  # a check: GitHub Actions tab -> R-CMD-check -> Run workflow.
   workflow_dispatch:
 
 name: R-CMD-check
