@@ -7,32 +7,35 @@ mod_report_ui <- function(id) {
   # Compact download button style used throughout the left column so
   # the summary + downloads + disagreements all fit above the fold.
   dl_class <- "btn-sm btn-outline-secondary"
+  # Downloads live in the Summary card's header (right-aligned,
+  # icon-only with tooltips) so the card collapses to just the
+  # bullet list and the disagreements table below gets more room.
+  dl_btn <- function(id, tip, icon) {
+    shiny::downloadButton(
+      id, label = "", class = dl_class,
+      icon = shiny::icon(icon),
+      title = tip
+    )
+  }
   bslib::layout_columns(
     col_widths = c(5, 7),
     # ---- Left column: Summary, downloads, disagreements ---------
     shiny::tagList(
       bslib::card(
-        bslib::card_header("Summary"),
-        shiny::uiOutput(ns("summary")),
-        shiny::tags$hr(class = "my-2"),
-        shiny::tags$small(class = "text-muted d-block mb-1", "Downloads:"),
-        shiny::div(
-          class = "d-flex flex-wrap gap-1",
-          shiny::downloadButton(ns("dl_decisions"), "Decisions",
-                                 class = dl_class,
-                                 icon = shiny::icon("file-csv")),
-          shiny::downloadButton(ns("dl_ranked"), "Ranked",
-                                 class = dl_class,
-                                 icon = shiny::icon("file-csv")),
-          shiny::downloadButton(ns("dl_report"), "Report",
-                                 class = dl_class,
-                                 icon = shiny::icon("file-code")),
-          shiny::downloadButton(ns("dl_html"), "HTML",
-                                 class = dl_class,
-                                 icon = shiny::icon("file-lines"))
+        bslib::card_header(
+          class = "d-flex justify-content-between align-items-center py-2",
+          shiny::tags$span("Summary"),
+          shiny::div(
+            class = "d-flex gap-1",
+            dl_btn(ns("dl_decisions"), "Download decisions.csv", "file-csv"),
+            dl_btn(ns("dl_ranked"),    "Download ranked corpus (CSV)", "table"),
+            dl_btn(ns("dl_report"),    "Download report (RDS)", "file-code"),
+            dl_btn(ns("dl_html"),
+                    "Download HTML report (open in browser, use Print > Save as PDF)",
+                    "file-lines")
+          )
         ),
-        shiny::tags$small(class = "text-muted d-block mt-1",
-                          "HTML report opens in a browser; use Print > Save as PDF to archive.")
+        shiny::uiOutput(ns("summary"))
       ),
       bslib::card(
         bslib::card_header("Strong LLM-human disagreements"),
