@@ -178,7 +178,7 @@ mod_criteria_server <- function(id, state) {
 
     # Load the CBFM criteria from inst/extdata rather than hardcoding
     # here. That file is the source of truth (the exact criteria from
-    # Spillias et al. 2024, Cell Reports Sustainability) and any
+    # Anonymous et al. 2024, Cell Reports Sustainability) and any
     # edit to it flows through to the app.
     shiny::observeEvent(input$load_cbfm, {
       spec <- tryCatch(load_toy_cbfm_criteria(),
@@ -202,7 +202,7 @@ mod_criteria_server <- function(id, state) {
       }
       shiny::showNotification(
         paste0(
-          "Loaded the CBFM example criteria from Spillias et al. ",
+          "Loaded the CBFM example criteria from Anonymous et al. ",
           "(2024, Cell Reports Sustainability). Edit as needed, then Save."
         ),
         duration = 5, type = "message"

@@ -22,6 +22,6 @@ A \code{screenllm_ensemble} object.
 }
 \description{
 Returns the four-LLM \emph{mean} ensemble reported as the universal
-ranker in Spillias et al. (2026), with three replicates per LLM. This
+ranker in Anonymous et al. (2026), with three replicates per LLM. This
 is the ensemble \code{rank_records()} uses when \code{ensemble} is not supplied.
 }

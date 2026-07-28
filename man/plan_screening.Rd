@@ -36,7 +36,7 @@ estimate and reports the stop-point conservatively.}
 A \code{screenllm_plan} object.
 }
 \description{
-Applies the SAFE rule from Spillias et al. (2026) to a ranking produced
+Applies the SAFE rule from Anonymous et al. (2026) to a ranking produced
 by \code{rank_records()}. Walks the ranked corpus from highest score to
 lowest, and returns the position where SAFE fires along with the
 subset of records the human should screen (everything at or above that

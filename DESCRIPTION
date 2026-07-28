@@ -1,24 +1,16 @@
 Package: screenllm
 Title: LLM-Assisted Title/Abstract Screening for Systematic Reviews
 Version: 0.1.0
-Authors@R: c(
-    person("Scott", "Spillias", email = "scott.spillias@csiro.au",
-           role = c("aut", "cre")),
-    person("Laura", "Avila Turriago", role = "aut"),
-    person("Christopher", "Brown", role = "aut"),
-    person("Ariane", "Easton", role = "aut"),
-    person("Jack", "Roberts", role = "aut"),
-    person("Michael", "Sievers", role = "aut"),
-    person("Steve", "Swearer", role = "aut"),
-    person("Andrew", "Taylor", role = "aut"),
-    person("Brigette", "Wright", role = "aut"),
-    person("Valeriya", "Komyakova", role = "aut"))
+Authors@R:
+    person("Anonymous", "Author", email = "anonymous@example.com",
+           role = c("aut", "cre"),
+           comment = "Author list withheld for double-blind peer review")
 Description: A turn-key workflow for LLM-assisted systematic-review screening.
     The package ranks a corpus of titles and abstracts with an ensemble of
     open-source large language models served locally by Ollama, then applies
     the SAFE stopping rule to identify the records a human should screen.
     Defaults match the four-LLM mean ensemble and the advance-choosable
-    SAFE configuration recommended by Spillias et al. (2026). A companion
+    SAFE configuration recommended by Anonymous et al. (2026). A companion
     Shiny app walks the human reviewer through the records above the
     stopping point. Complementary to the 'AIscreenR' package (Vembye et
     al. 2025, <doi:10.1037/met0000769>), which targets cloud-hosted GPT
@@ -56,6 +48,6 @@ Suggests:
     stringdist
 Config/testthat/edition: 3
 VignetteBuilder: knitr
-URL: https://github.com/s-spillias/screenllm
-BugReports: https://github.com/s-spillias/screenllm/issues
+URL: https://anonymous.4open.science/r/screenllm
+BugReports: https://anonymous.4open.science/r/screenllm
 Config/roxygen2/version: 8.0.0

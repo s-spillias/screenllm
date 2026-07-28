@@ -162,15 +162,15 @@ mod_setup_ui <- function(id) {
         shiny::tags$ul(
           class = "small mb-2",
           shiny::tags$li(
-            shiny::tags$a(href = "https://github.com/s-spillias/screenllm",
+            shiny::tags$a(href = "https://anonymous.4open.science/r/screenllm",
                           target = "_blank", "GitHub repo")
           ),
           shiny::tags$li(
-            shiny::tags$a(href = "https://github.com/s-spillias/screenllm/blob/main/docs/getting-started.md",
+            shiny::tags$a(href = "https://anonymous.4open.science/r/screenllm/blob/main/docs/getting-started.md",
                           target = "_blank", "Getting-started guide")
           ),
           shiny::tags$li(
-            shiny::tags$a(href = "https://github.com/s-spillias/screenllm/blob/main/docs/troubleshooting.md",
+            shiny::tags$a(href = "https://anonymous.4open.science/r/screenllm/blob/main/docs/troubleshooting.md",
                           target = "_blank", "Troubleshooting")
           )
         ),
@@ -178,7 +178,7 @@ mod_setup_ui <- function(id) {
         shiny::tags$p(
           class = "small text-muted mb-0",
           shiny::tags$strong("Cite:"),
-          " Spillias, S. et al. (2026). ",
+          " Anonymous et al. (2026). ",
           shiny::tags$em("An open-source LLM-assisted screening workflow for environmental systematic reviews."),
           " (in submission)."
         )

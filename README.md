@@ -10,12 +10,12 @@ laptop.
 > **[docs/getting-started.md](docs/getting-started.md)**
 >
 > Report issues at
-> [github.com/s-spillias/screenllm/issues/new/choose](https://github.com/s-spillias/screenllm/issues/new/choose)
-> or email <scott.spillias@csiro.au>. Common problems are covered in
+> [github.com/anonymous/screenllm/issues/new/choose](https://anonymous.4open.science/r/screenllm/issues/new/choose)
+> or email <anonymous@example.com>. Common problems are covered in
 > [docs/troubleshooting.md](docs/troubleshooting.md).
 
 `screenllm` operationalises the two workflow choices systematically
-evaluated in **Spillias et al. (2026)**:
+evaluated in **Anonymous et al. (2026)**:
 
 1. **Ranking** — score every record with a locally-served ensemble of
    open-source LLMs (default: four models × three replicates, averaged) and
@@ -36,7 +36,7 @@ Two options depending on how much you have to install.
 
 ```r
 install.packages("screenllm")           # once on CRAN
-# or: remotes::install_github("s-spillias/screenllm")
+# or: remotes::install_github("anonymous/screenllm")
 library(screenllm)
 install_prereqs()                        # detects OS, offers to install
                                          # Ollama, pulls the four paper models
@@ -154,9 +154,7 @@ integrated stopping rule. If your use case is different, you may want:
 
 If you use `screenllm` in a review, please cite the methods paper:
 
-> Spillias, S., Avila Turriago, L., Brown, C., Easton, A., Roberts, J.,
-> Sievers, M., Swearer, S., Taylor, A., Wright, B., & Komyakova, V.
-> (2026). *Operationalising LLM-assisted screening of literature to
+> Anonymous et al. (2026). *Operationalising LLM-assisted screening of literature to
 > support systematic reviews.* Manuscript in submission; preprint
 > forthcoming.
 

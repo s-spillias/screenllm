@@ -11,7 +11,7 @@ A \code{screenllm_criteria} object.
 }
 \description{
 Reads \code{inst/extdata/toy_cbfm_criteria.R} (which mirrors the CBFM
-entry of the screening criteria used in Spillias et al. 2024,
+entry of the screening criteria used in Anonymous et al. 2024,
 Cell Reports Sustainability) and returns a \code{screenllm_criteria}
 object ready to feed into \code{rank_records()}.
 }

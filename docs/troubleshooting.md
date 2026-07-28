@@ -1,7 +1,7 @@
 # Troubleshooting
 
 Common problems and their fixes. If none of these help, open an issue or
-email Scott.
+contact the maintainers.
 
 ## Installation
 
@@ -254,11 +254,11 @@ again.
 ## When you're truly stuck
 
 Open a GitHub issue at
-<https://github.com/s-spillias/screenllm/issues/new/choose> and pick
+<https://anonymous.4open.science/r/screenllm/issues/new/choose> and pick
 "Bug report." Include:
 
 - Your operating system
 - The output of `sessionInfo()` (paste it into the issue)
 - The exact command you ran and the error message
 
-Or email Scott directly (scott.spillias@csiro.au) with the same info.
+Or contact the maintainers (anonymous@example.com) with the same info.

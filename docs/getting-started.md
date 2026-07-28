@@ -39,7 +39,7 @@ Copy-paste this line into the R console (bottom-left panel) and press
 Enter:
 
 ```r
-install.packages("remotes"); remotes::install_github("s-spillias/screenllm")
+install.packages("remotes"); remotes::install_github("anonymous/screenllm")
 ```
 
 It'll print a lot of "installing" messages for a couple of minutes. If it
@@ -151,13 +151,13 @@ don't need to bring anything.
 
 You're done. Please spend three minutes filling out the feedback form:
 
-<https://github.com/s-spillias/screenllm/issues/new/choose>
+<https://anonymous.4open.science/r/screenllm/issues/new/choose>
 
 Pick "Alpha tester feedback." If something broke, pick "Bug report"
 instead.
 
-If GitHub is blocked at your institution, email Scott
-(scott.spillias@csiro.au) with:
+If GitHub is blocked at your institution, contact the maintainers
+(anonymous@example.com) with:
 
 - Your operating system and RAM
 - Which step (from the numbered list above) failed
@@ -183,7 +183,7 @@ smaller: `install_prereqs(models = c("gemma3:1b", "llama3.2:1b"))`.
 Accuracy drops but it'll run on 4 GB of RAM.
 
 **Q: Can I use this for a real review?** Yes, on the understanding
-that it's alpha software. The methodology is peer-reviewed (Spillias et
+that it's alpha software. The methodology is peer-reviewed (Anonymous et
 al. 2026); the package around it is still being refined based on
 feedback like yours.
 

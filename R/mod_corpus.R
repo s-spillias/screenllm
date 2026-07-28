@@ -38,7 +38,7 @@ mod_corpus_ui <- function(id) {
         " column, plus (in the toy file only) a ",
         shiny::tags$code("human_decision"),
         " column with ground-truth screening labels for benchmarking. ",
-        "Toy corpus + labels are from Spillias et al. (2024), ",
+        "Toy corpus + labels are from Anonymous et al. (2024), ",
         shiny::tags$em("Human-AI collaboration to identify literature for evidence synthesis"),
         ", Cell Reports Sustainability, ",
         shiny::tags$a(href = "https://doi.org/10.1016/j.crsus.2024.100132",

@@ -12,7 +12,7 @@ Initial CRAN submission of `screenllm` 0.1.0.
   The result URL is emailed from win-builder within 30 minutes of
   upload and looks like <https://win-builder.r-project.org/xxxxxxxx/>.
 * R-hub (via GitHub Actions R-hub workflow): __PASTE RESULTS HERE__.
-  See <https://github.com/s-spillias/screenllm/actions/workflows/rhub.yaml>.
+  See <https://anonymous.4open.science/r/screenllm/actions/workflows/rhub.yaml>.
 * GitHub Actions R-CMD-check matrix (see `.github/workflows/R-CMD-check.yaml`):
   ubuntu-latest R-release + R-devel, macos-latest R-release,
   windows-latest R-release. Latest green: __PASTE COMMIT SHA HERE__.
@@ -67,12 +67,12 @@ regression-tested.
 3. **Shiny app** is `Suggests:`-only, so users on servers without
    Shiny installed can still call the ranking / stopping API.
 
-4. **Companion paper.** Spillias et al. (2026), *An open-source
+4. **Companion paper.** Anonymous et al. (2026), *An open-source
    LLM-assisted screening workflow for environmental systematic
    reviews.* (in submission — DOI to be added on acceptance and
    reflected in a 0.1.1 update).
 
 ## Reproducibility
 
-* Source: <https://github.com/s-spillias/screenllm>
+* Source: <https://anonymous.4open.science/r/screenllm>
 * Public before submission: yes (private during alpha).

@@ -111,13 +111,13 @@ mod_overview_ui <- function(id) {
           shiny::tags$ul(
             class = "small mb-2",
             shiny::tags$li(
-              shiny::tags$a(href = "https://github.com/s-spillias/screenllm/blob/main/docs/getting-started.md",
+              shiny::tags$a(href = "https://anonymous.4open.science/r/screenllm/blob/main/docs/getting-started.md",
                             target = "_blank", "Getting-started guide")),
             shiny::tags$li(
-              shiny::tags$a(href = "https://github.com/s-spillias/screenllm/blob/main/docs/troubleshooting.md",
+              shiny::tags$a(href = "https://anonymous.4open.science/r/screenllm/blob/main/docs/troubleshooting.md",
                             target = "_blank", "Troubleshooting")),
             shiny::tags$li(
-              shiny::tags$a(href = "https://github.com/s-spillias/screenllm/issues/new/choose",
+              shiny::tags$a(href = "https://anonymous.4open.science/r/screenllm/issues/new/choose",
                             target = "_blank", "Report an issue"))
           ),
           shiny::tags$hr(class = "my-2"),
@@ -125,9 +125,7 @@ mod_overview_ui <- function(id) {
                         shiny::tags$strong("Cite screenllm:")),
           shiny::tags$p(
             class = "small text-muted mb-2",
-            "Spillias, S., Avila Turriago, L., Brown, C., Easton, A., ",
-            "Roberts, J., Sievers, M., Swearer, S., Taylor, A., Wright, B., ",
-            "& Komyakova, V. (2026). ",
+            "Anonymous et al. (2026). ",
             shiny::tags$em("Operationalising LLM-assisted screening of literature to support systematic reviews."),
             " (in submission; preprint forthcoming)."
           ),
@@ -135,7 +133,7 @@ mod_overview_ui <- function(id) {
                         shiny::tags$strong("Toy CBFM corpus + criteria are from:")),
           shiny::tags$p(
             class = "small text-muted mb-0",
-            "Spillias, S., Tuohy, P., Andreotta, M., Annand-Jones, R., ",
+            "Anonymous, Tuohy, P., Andreotta, M., Annand-Jones, R., ",
             "Boschetti, F., Cvitanovic, C., Duggan, J., Fulton, E. A., ",
             "Karcher, D. B., Paris, C., Shellock, R., & Trebilco, R. (2024). ",
             shiny::tags$em("Human-AI collaboration to identify literature for evidence synthesis."),

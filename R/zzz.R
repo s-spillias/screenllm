@@ -4,7 +4,7 @@ NULL
 
 # Package options and internal constants.
 
-# The four LLMs pinned as the default ensemble in Spillias et al. (2026).
+# The four LLMs pinned as the default ensemble in Anonymous et al. (2026).
 # Users override with `custom_ensemble()`; these tags are Ollama identifiers.
 .PINNED_DEFAULT_MODELS <- c(
   "gemma3:27b",

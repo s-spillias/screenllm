@@ -1,6 +1,6 @@
 #' Plan the human screening set with the SAFE stopping rule
 #'
-#' Applies the SAFE rule from Spillias et al. (2026) to a ranking produced
+#' Applies the SAFE rule from Anonymous et al. (2026) to a ranking produced
 #' by `rank_records()`. Walks the ranked corpus from highest score to
 #' lowest, and returns the position where SAFE fires along with the
 #' subset of records the human should screen (everything at or above that

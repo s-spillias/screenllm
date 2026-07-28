@@ -14,7 +14,7 @@ Initial CRAN release.
 * Optional `on_score` callback for streaming partial-run progress into
   a UI without editing `rank_records()` itself.
 * `default_ensemble()` returns the four-LLM mean ensemble reported as
-  the universal ranker in Spillias et al. (2026) (`gemma3:27b`,
+  the universal ranker in Anonymous et al. (2026) (`gemma3:27b`,
   `gpt-oss:20b`, `mistral-small3.2:24b`, `qwen3:30b-a3b-instruct-2507`;
   three replicates each at temperature 0.7).
 * `default_ensemble_light()` returns a laptop-friendly alternative

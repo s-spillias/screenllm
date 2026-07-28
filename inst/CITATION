@@ -7,21 +7,9 @@ bibentry(
   bibtype = "Article",
   title   = paste("Operationalising LLM-assisted screening of literature",
                   "to support systematic reviews"),
-  author  = c(
-    person("Scott",     "Spillias", email = "scott.spillias@csiro.au",
-           role = c("aut", "cre")),
-    person("Laura",     "Avila Turriago"),
-    person("Christopher", "Brown"),
-    person("Ariane",    "Easton"),
-    person("Jack",      "Roberts"),
-    person("Michael",   "Sievers"),
-    person("Steve",     "Swearer"),
-    person("Andrew",    "Taylor"),
-    person("Brigette",  "Wright"),
-    person("Valeriya",  "Komyakova")
-  ),
+  author  = person("Anonymous", "Author",
+                   comment = "Author list withheld for double-blind peer review"),
   year    = 2026,
   journal = "Manuscript in submission",
-  note    = paste("Preprint forthcoming; software available at",
-                  "https://github.com/s-spillias/screenllm")
+  note    = "Preprint forthcoming; repository link withheld for review"
 )
