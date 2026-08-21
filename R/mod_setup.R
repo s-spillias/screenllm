@@ -915,9 +915,9 @@ mod_setup_server <- function(id, state) {
             if (length(models) == 0L) {
               cli::cli_abort("Tick at least one model.")
             }
-            # Replicates default to 3 here; the Rank tab lets the
-            # user override at run time.
-            custom_ensemble(models = models, replicates = 3L)
+            # Replicates default to one (the package default); the Rank tab
+            # lets the user raise it at run time for a variance estimate.
+            custom_ensemble(models = models)
           }
         )
       }, error = function(e) {

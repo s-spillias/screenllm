@@ -1,12 +1,18 @@
 #' The paper's default LLM ensemble
 #'
 #' Returns the four-LLM \emph{mean} ensemble reported as the universal
-#' ranker in Anonymous et al. (2026), with three replicates per LLM. This
-#' is the ensemble `rank_records()` uses when `ensemble` is not supplied.
+#' ranker in Anonymous et al. (2026). This is the ensemble `rank_records()`
+#' uses when `ensemble` is not supplied. It defaults to a single replicate per
+#' LLM: the paper's replicate cost-benefit analysis shows one replicate recovers
+#' almost all of the ranking and stopping performance, so additional replicates
+#' are worth running only for a variance estimate or extra robustness.
 #'
 #' @param backend A backend object (default: `backend_ollama()`).
-#' @param replicates Integer >= 1. Defaults to three.
-#' @param temperature Sampling temperature. Defaults to 0.7 (per the paper).
+#' @param replicates Integer >= 1. Defaults to one. A single replicate recovers
+#'   almost all ranking and stopping performance; raise it for a variance
+#'   estimate or to guard against an occasional degenerate run.
+#' @param temperature Sampling temperature. Defaults to 0.1, the paper setting;
+#'   see [custom_ensemble()], which warns when it is changed.
 #' @return A `screenllm_ensemble` object.
 #' @export
 default_ensemble <- function(backend = backend_ollama(),
@@ -61,9 +67,11 @@ default_ensemble_light <- function(backend = backend_ollama(),
 #'
 #' @param models Character vector of Ollama model tags (or backend-appropriate
 #'   identifiers).
-#' @param replicates Integer >= 1. Number of replicates per model.
+#' @param replicates Integer >= 1. Number of replicates per model. Defaults to
+#'   one (see [default_ensemble()]).
 #' @param aggregator One of "mean", "median", "max", "topk_mean".
-#' @param temperature Sampling temperature passed to the backend.
+#' @param temperature Sampling temperature passed to the backend. Defaults to
+#'   0.1, the paper setting; any other value emits a warning.
 #' @param backend A backend object (default: `backend_ollama()`).
 #' @return A `screenllm_ensemble` object.
 #' @export
@@ -79,6 +87,17 @@ custom_ensemble <- function(models,
     length(temperature) == 1L, is.numeric(temperature),
     temperature >= 0, temperature <= 2
   )
+  # The paper's accuracy, calibration, and stopping guarantees are all
+  # conditional on temperature 0.1; warn if the user departs from it.
+  if (!isTRUE(all.equal(temperature, .DEFAULT_TEMPERATURE))) {
+    paper_temp <- .DEFAULT_TEMPERATURE
+    cli::cli_warn(c(
+      "!" = "Sampling temperature is {.val {temperature}}, not the paper's {.val {paper_temp}}.",
+      "i" = "All reported accuracy, score calibration, and stopping-rule guarantees are conditional on temperature {.val {paper_temp}}.",
+      "i" = "Higher temperatures increase replicate-to-replicate variance; if you raise it, also raise {.arg replicates} to average that out. Temperatures near 0 can make a model repeat one (possibly wrong) judgement.",
+      "*" = "Change this only if you understand the trade-off."
+    ))
+  }
   structure(
     list(
       models = models,

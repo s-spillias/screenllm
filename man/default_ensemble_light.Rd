@@ -13,9 +13,12 @@ default_ensemble_light(
 \arguments{
 \item{backend}{A backend object (default: \code{backend_ollama()}).}
 
-\item{replicates}{Integer >= 1. Defaults to three.}
+\item{replicates}{Integer >= 1. Defaults to one. A single replicate recovers
+almost all ranking and stopping performance; raise it for a variance
+estimate or to guard against an occasional degenerate run.}
 
-\item{temperature}{Sampling temperature. Defaults to 0.7 (per the paper).}
+\item{temperature}{Sampling temperature. Defaults to 0.1, the paper setting;
+see \code{\link[=custom_ensemble]{custom_ensemble()}}, which warns when it is changed.}
 }
 \value{
 A \code{screenllm_ensemble} object.

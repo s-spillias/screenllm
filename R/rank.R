@@ -72,7 +72,7 @@ rank_records <- function(records,
     cache_dir <- fs::path(tempdir(), "screenllm-cache")
   }
   fs::dir_create(cache_dir, recurse = TRUE)
-  criteria_hash <- digest::digest(criteria)
+  criteria_hash <- rlang::hash(criteria)
 
   # Drop any pre-existing output columns so the join at the end does not
   # duplicate them with .x/.y suffixes.
@@ -107,7 +107,7 @@ rank_records <- function(records,
   scores <- vector("list", nrow(jobs))
   for (i in seq_len(nrow(jobs))) {
     row <- jobs[i, ]
-    cache_key <- digest::digest(list(
+    cache_key <- rlang::hash(list(
       criteria_hash, row$model, row$replicate, row$id,
       ensemble$temperature
     ))

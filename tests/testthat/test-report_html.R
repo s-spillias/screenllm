@@ -1,7 +1,4 @@
 test_that("export_report renders a self-contained HTML document", {
-  skip_if_not_installed("rmarkdown")
-  skip_if_not_installed("knitr")
-
   # Small end-to-end fixture: rank three records, plan, invent
   # decisions, and render the report.
   records <- data.frame(
@@ -34,9 +31,6 @@ test_that("export_report renders a self-contained HTML document", {
 })
 
 test_that("export_report tolerates missing artefacts", {
-  skip_if_not_installed("rmarkdown")
-  skip_if_not_installed("knitr")
-
   out <- tempfile(fileext = ".html")
   # All params NULL should still render (the template writes "(not
   # recorded)" placeholders).

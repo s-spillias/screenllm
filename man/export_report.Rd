@@ -34,17 +34,16 @@ file in \code{tempdir()}.}
 Invisibly, the path to the rendered HTML file.
 }
 \description{
-Knits the packaged R Markdown template with whatever project
-artefacts are supplied and returns the path to the rendered HTML
-file. Open it in a browser to view; use the browser's
-Print > Save as PDF to archive as PDF (this avoids the LaTeX install
-that a direct PDF backend would need).
+Builds a single self-contained HTML file from whatever project
+artefacts are supplied and returns the path to it. Open it in a
+browser to view; use the browser's Print > Save as PDF to archive as
+PDF (this avoids the LaTeX install that a direct PDF backend would
+need).
 }
 \details{
-All artefact arguments default to \code{NULL}; the template gracefully
-fills in "(not recorded)" for anything missing, so the same call
-works whether the reviewer is midway through screening or fully
-finished.
+All artefact arguments default to \code{NULL}; the report fills in "(not
+recorded)" for anything missing, so the same call works whether the
+reviewer is midway through screening or fully finished.
 }
 \examples{
 \dontrun{

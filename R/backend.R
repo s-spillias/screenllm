@@ -44,7 +44,7 @@ backend_ollama <- function(ollama_url = getOption("screenllm.ollama_url"),
 
 #' Mock backend for tests
 #'
-#' Returns deterministic scores derived from a `digest::digest` hash of the
+#' Returns deterministic scores derived from an `rlang::hash` of the
 #' prompt. Never hits the network. Useful for unit tests and for
 #' package-development end-to-end runs without needing Ollama.
 #'
@@ -60,8 +60,8 @@ backend_mock <- function(base = 50L) {
     list(
       name = "mock",
       score_record = function(model, prompt, temperature) {
-        digest_bytes <- as.integer(charToRaw(digest::digest(
-          paste(model, prompt), algo = "md5", serialize = FALSE
+        digest_bytes <- as.integer(charToRaw(rlang::hash(
+          paste(model, prompt)
         )))
         # Deterministic pseudo-random score in [0, 100]
         val <- (base + sum(digest_bytes[1:4]) %% 51 - 25) %% 101
@@ -77,8 +77,10 @@ backend_mock <- function(base = 50L) {
 }
 
 #' @keywords internal
-ollama_score <- function(model, prompt, temperature,
-                         ollama_url, timeout, max_retries) {
+# Build the `/api/generate` request body for one record. Pure (no I/O)
+# so the model-specific options logic is unit-testable on its own.
+#' @keywords internal
+ollama_request_body <- function(model, prompt, temperature) {
   body <- list(
     model = model,
     prompt = prompt,
@@ -100,6 +102,23 @@ ollama_score <- function(model, prompt, temperature,
   if (!is_reasoning_model(model)) {
     body$format <- "json"
   }
+  # Some qwen3 Ollama tags emit '<|endoftext|>' / '<|im_end|>' as literal
+  # text without halting, so the model runs past the JSON and hallucinates
+  # a follow-on task -- corrupting a large fraction of records (15-34% in
+  # our benchmark runs). Register those markers as explicit stops so
+  # generation ends at the end of the JSON. This does not alter the JSON
+  # that precedes the stop. Harmless for non-qwen tags (they don't emit
+  # these markers); belt-and-braces alongside `format = "json"`, and the
+  # only guard on the reasoning-qwen path where `format` is skipped.
+  if (grepl("qwen", model, ignore.case = TRUE)) {
+    body$options$stop <- c("<|endoftext|>", "<|im_end|>")
+  }
+  body
+}
+
+ollama_score <- function(model, prompt, temperature,
+                         ollama_url, timeout, max_retries) {
+  body <- ollama_request_body(model, prompt, temperature)
   # `error` is filled in by any failure path (HTTP error, JSON parse
   # error, out-of-range score). Callers can distinguish
   # missing-model / auth failures from an all-timeouts run.

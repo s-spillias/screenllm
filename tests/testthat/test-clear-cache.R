@@ -14,10 +14,10 @@ test_that("clear_cache removes only the requested model's cached scores", {
     # The filename must not contain ':' -- on Windows that character is
     # reserved and saveRDS writes into an NTFS alternate data stream,
     # so `fs::dir_ls` finds 0 files and the assertions below fail.
-    # Real cache files in production use digest hashes (alphanumeric),
+    # Real cache files in production use rlang::hash keys (alphanumeric),
     # so production is unaffected; this only bit the test.
     writer <- function(model, id, replicate) {
-      key <- digest::digest(list(model, id, replicate))
+      key <- rlang::hash(list(model, id, replicate))
       saveRDS(list(model = model, id = id, replicate = replicate,
                     score = 42, explanation = "why"),
               fs::path(cache_dir, paste0(key, ".rds")))

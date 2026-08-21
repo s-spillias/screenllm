@@ -92,7 +92,7 @@ slugify_project_name <- function(name) {
   # silently overwrote each other on disk. Append a short hash of
   # the original name so distinct inputs get distinct slugs.
   if (!nzchar(slug)) {
-    slug <- paste0("project_", substr(digest::digest(name), 1, 10))
+    slug <- paste0("project_", substr(rlang::hash(name), 1, 10))
   }
   slug
 }

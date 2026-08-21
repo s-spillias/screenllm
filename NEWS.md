@@ -1,3 +1,40 @@
+# screenllm (development version)
+
+## Defaults aligned with the paper's replicate cost-benefit analysis
+
+* The default number of replicates per model is now **1** (previously 3), in
+  `default_ensemble()`, `default_ensemble_light()`, `custom_ensemble()`, and the
+  Shiny Rank/Setup tabs. The paper's replicate analysis shows a single replicate
+  recovers almost all ranking and stopping performance (going from 1 to 3
+  replicates adds only about 0.008 AP, within replicate noise). Raise
+  `replicates` when you want a per-strategy variance estimate or insurance
+  against an occasional degenerate run.
+* The default sampling `temperature` is now **0.1** (previously 0.7), the value
+  used throughout the paper. `custom_ensemble()` now emits a warning whenever
+  `temperature` is set to any other value, because the reported accuracy, score
+  calibration, and stopping-rule guarantees are all conditional on 0.1.
+
+## No GPL-licensed dependencies
+
+The package and its required install are now MIT/BSD-only; all four
+GPL-licensed dependencies have been removed with no loss of features.
+
+* Cache keys and project slugs use `rlang::hash()` instead of
+  `digest::digest()`. `digest` is no longer imported. Cache keys change
+  as a result, so an existing persistent cache (a user-set `cache_dir`)
+  recomputes once on the next run; the default cache lives in
+  `tempdir()` and is unaffected.
+* `find_duplicates(fuzzy = TRUE)` now computes Jaro string similarity in
+  base R instead of via `stringdist`, reproducing the previous result
+  (the old call used `method = "jw", p = 0`, i.e. plain Jaro). `fuzzy`
+  matching no longer requires an optional package to be installed.
+* `export_report()` builds the HTML report directly instead of rendering
+  an R Markdown template, dropping the `rmarkdown` and `knitr`
+  dependencies. The report content and self-contained-HTML output are
+  unchanged.
+* The quickstart vignette is now a plain-Markdown guide at
+  `docs/quickstart.md`, so the package no longer needs a vignette builder.
+
 # screenllm 0.1.0
 
 Initial CRAN release.
@@ -27,6 +64,11 @@ Initial CRAN release.
   bad run can be re-done without discarding the good models' work.
 * `estimate_runtime()` gives an order-of-magnitude wall-clock estimate
   scaled by model size and hardware profile (GPU / CPU / throttled).
+* qwen3 tags are sent explicit stop tokens (`<|endoftext|>`,
+  `<|im_end|>`). Some qwen3 Ollama builds emit these markers as literal
+  text without halting, running past the JSON and corrupting a large
+  fraction of scores; the stops make generation end at the JSON. Other
+  models are unaffected.
 
 ## Screening plan
 

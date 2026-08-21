@@ -77,6 +77,10 @@ than the paper ensemble, but runs comfortably on 8-16 GB of RAM.
 
 ## The six-call workflow
 
+For a runnable, step-by-step walkthrough (using a bundled toy corpus and
+the mock backend, so it runs without Ollama), see
+[docs/quickstart.md](docs/quickstart.md).
+
 ```r
 library(screenllm)
 
@@ -103,7 +107,7 @@ audit_disagreements(ranked, decisions)          # LLM–human disagreement audit
 ## Design choices
 
 - **Caching is on by default.** Every LLM call is keyed by
-  `digest(list(model, replicate, criteria_hash, record_id, temperature))`.
+  `rlang::hash(list(criteria_hash, model, replicate, record_id, temperature))`.
   An interrupted run resumes seamlessly.
 - **Sequential model service.** Ollama serves one model at a time on a
   laptop. `rank_records()` iterates models × replicates × records; the

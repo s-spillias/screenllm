@@ -47,8 +47,7 @@ test_that("find_duplicates catches normalised title matches", {
   expect_equal(out$duplicate_of, c(NA, "a", NA))
 })
 
-test_that("find_duplicates fuzzy match catches near-duplicates when stringdist is available", {
-  skip_if_not_installed("stringdist")
+test_that("find_duplicates fuzzy match catches near-duplicates", {
   recs <- data.frame(
     id = c("a", "b", "c"),
     title = c("A study of coral reef restoration outcomes",

@@ -9,10 +9,9 @@ find_duplicates(records, fuzzy = TRUE)
 \arguments{
 \item{records}{A tibble of records from \code{read_records()}.}
 
-\item{fuzzy}{Whether to fuzzy-match titles (Jaro-Winkler
-similarity of at least 0.95). Requires the \code{stringdist}
-package; falls back to exact normalised-title match if
-\code{stringdist} is not installed.}
+\item{fuzzy}{Whether to fuzzy-match titles (Jaro string
+similarity of at least 0.95). Set \code{FALSE} to match on exact
+normalised titles only.}
 }
 \value{
 The input tibble with a new \code{duplicate_of} column.
@@ -21,10 +20,9 @@ The input tibble with a new \code{duplicate_of} column.
 Two records are considered duplicates if they share a non-missing DOI
 (case-insensitive) or if their normalised titles match. Title
 normalisation drops punctuation, lowercases, collapses whitespace, and
-(optionally) fuzzy-matches with \code{stringdist} if that package is
-available. Returns the input tibble with an added \code{duplicate_of}
-column: \code{NA} for unique records, otherwise the id of the earlier
-record that duplicates it.
+(optionally) fuzzy-matches titles by Jaro string similarity. Returns
+the input tibble with an added \code{duplicate_of} column: \code{NA} for unique
+records, otherwise the id of the earlier record that duplicates it.
 }
 \details{
 Multi-database searches (Scopus, Web of Science, Google Scholar) often

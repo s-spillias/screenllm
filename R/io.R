@@ -221,20 +221,18 @@ read_ris_records <- function(path) {
 #' Two records are considered duplicates if they share a non-missing DOI
 #' (case-insensitive) or if their normalised titles match. Title
 #' normalisation drops punctuation, lowercases, collapses whitespace, and
-#' (optionally) fuzzy-matches with `stringdist` if that package is
-#' available. Returns the input tibble with an added `duplicate_of`
-#' column: `NA` for unique records, otherwise the id of the earlier
-#' record that duplicates it.
+#' (optionally) fuzzy-matches titles by Jaro string similarity. Returns
+#' the input tibble with an added `duplicate_of` column: `NA` for unique
+#' records, otherwise the id of the earlier record that duplicates it.
 #'
 #' Multi-database searches (Scopus, Web of Science, Google Scholar) often
 #' produce 10-20 percent duplicates; running this on the fresh corpus
 #' before ranking avoids scoring the same abstract three or four times.
 #'
 #' @param records A tibble of records from `read_records()`.
-#' @param fuzzy Whether to fuzzy-match titles (Jaro-Winkler
-#'   similarity of at least 0.95). Requires the `stringdist`
-#'   package; falls back to exact normalised-title match if
-#'   `stringdist` is not installed.
+#' @param fuzzy Whether to fuzzy-match titles (Jaro string
+#'   similarity of at least 0.95). Set `FALSE` to match on exact
+#'   normalised titles only.
 #' @return The input tibble with a new `duplicate_of` column.
 #' @export
 #' @examples
@@ -271,11 +269,10 @@ find_duplicates <- function(records, fuzzy = TRUE) {
       duplicate_of[i] <- get(tkey, envir = seen_titles)
       next
     }
-    if (isTRUE(fuzzy) && rlang::is_installed("stringdist") &&
-          !is.na(tkey) && nzchar(tkey)) {
+    if (isTRUE(fuzzy) && !is.na(tkey) && nzchar(tkey)) {
       prior <- ls(seen_titles)
       if (length(prior) > 0L) {
-        sims <- 1 - stringdist::stringdist(tkey, prior, method = "jw")
+        sims <- jaro_similarity(tkey, prior)
         best <- which.max(sims)
         if (sims[best] >= 0.95) {
           duplicate_of[i] <- get(prior[best], envir = seen_titles)
@@ -288,6 +285,56 @@ find_duplicates <- function(records, fuzzy = TRUE) {
   }
   records$duplicate_of <- duplicate_of
   records
+}
+
+#' Jaro string similarity (base R)
+#'
+#' Similarity of one string `a` against each element of `b`, in `[0, 1]`.
+#' Reproduces `stringdist::stringdist(a, b, method = "jw", p = 0)` (plain
+#' Jaro, no Winkler prefix bonus) so the package's fuzzy de-duplication
+#' keeps working without a compiled dependency. `NA` inputs yield `NA`.
+#'
+#' @param a A single string.
+#' @param b A character vector to compare against.
+#' @return A numeric vector, one similarity per element of `b`.
+#' @keywords internal
+jaro_similarity <- function(a, b) {
+  vapply(b, function(bb) jaro_pair(a, bb), numeric(1), USE.NAMES = FALSE)
+}
+
+#' @keywords internal
+jaro_pair <- function(s1, s2) {
+  if (is.na(s1) || is.na(s2)) return(NA_real_)
+  if (identical(s1, s2)) return(1)
+  a <- utf8ToInt(s1)
+  b <- utf8ToInt(s2)
+  len1 <- length(a)
+  len2 <- length(b)
+  if (len1 == 0L || len2 == 0L) return(0)
+  # Winkler's matching window: characters can only match within this many
+  # positions of each other.
+  max_dist <- max(len1, len2) %/% 2L - 1L
+  if (max_dist < 0L) max_dist <- 0L
+  a_match <- logical(len1)
+  b_match <- logical(len2)
+  m <- 0L
+  for (i in seq_len(len1)) {
+    lo <- max(1L, i - max_dist)
+    hi <- min(len2, i + max_dist)
+    if (lo > hi) next
+    for (j in lo:hi) {
+      if (!b_match[j] && a[i] == b[j]) {
+        a_match[i] <- TRUE
+        b_match[j] <- TRUE
+        m <- m + 1L
+        break
+      }
+    }
+  }
+  if (m == 0L) return(0)
+  # Half the number of matched characters that are out of order.
+  t <- sum(a[a_match] != b[b_match]) / 2
+  (m / len1 + m / len2 + (m - t) / m) / 3
 }
 
 #' @keywords internal

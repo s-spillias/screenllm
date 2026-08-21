@@ -25,8 +25,16 @@ NULL
   "mistral:7b"
 )
 
-.DEFAULT_REPLICATES <- 3L
-.DEFAULT_TEMPERATURE <- 0.7
+# The paper ran r = 3 replicates at temperature 0.1. Its replicate cost-benefit
+# analysis shows a single replicate recovers almost all ranking and stopping
+# performance (1 -> 3 replicates adds only ~0.008 AP, within replicate noise);
+# the extra replicates mainly buy a variance estimate and guard against a
+# degenerate run. The package therefore defaults to a single replicate, and to
+# the paper's temperature of 0.1. custom_ensemble() warns when temperature is
+# changed, because the reported accuracy and stopping guarantees are conditional
+# on it.
+.DEFAULT_REPLICATES <- 1L
+.DEFAULT_TEMPERATURE <- 0.1
 .DEFAULT_TARGET_RECALL <- 0.95
 .DEFAULT_SAFE_MIN_COVER <- 0.50
 .DEFAULT_SAFE_RUN_LENGTH <- 50L

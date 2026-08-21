@@ -16,11 +16,13 @@ custom_ensemble(
 \item{models}{Character vector of Ollama model tags (or backend-appropriate
 identifiers).}
 
-\item{replicates}{Integer >= 1. Number of replicates per model.}
+\item{replicates}{Integer >= 1. Number of replicates per model. Defaults to
+one (see \code{\link[=default_ensemble]{default_ensemble()}}).}
 
 \item{aggregator}{One of "mean", "median", "max", "topk_mean".}
 
-\item{temperature}{Sampling temperature passed to the backend.}
+\item{temperature}{Sampling temperature passed to the backend. Defaults to
+0.1, the paper setting; any other value emits a warning.}
 
 \item{backend}{A backend object (default: \code{backend_ollama()}).}
 }

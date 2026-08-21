@@ -14,7 +14,7 @@ prompt-derived variation.}
 A backend object.
 }
 \description{
-Returns deterministic scores derived from a \code{digest::digest} hash of the
+Returns deterministic scores derived from an \code{rlang::hash} of the
 prompt. Never hits the network. Useful for unit tests and for
 package-development end-to-end runs without needing Ollama.
 }

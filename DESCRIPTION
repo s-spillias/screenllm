@@ -1,6 +1,6 @@
 Package: screenllm
 Title: LLM-Assisted Title/Abstract Screening for Systematic Reviews
-Version: 0.1.0
+Version: 0.1.0.9000
 Authors@R:
     person("Anonymous", "Author", email = "anonymous@example.com",
            role = c("aut", "cre"),
@@ -23,14 +23,14 @@ Depends:
     R (>= 4.1.0)
 Imports:
     cli,
-    digest,
     fs,
     jsonlite,
     tibble,
     dplyr,
     rlang,
     httr2,
-    glue
+    glue,
+    utils
 Suggests:
     shiny,
     bslib,
@@ -40,14 +40,10 @@ Suggests:
     writexl,
     readxl,
     testthat (>= 3.0.0),
-    knitr,
-    rmarkdown,
     readr,
     withr,
-    mockery,
-    stringdist
+    mockery
 Config/testthat/edition: 3
-VignetteBuilder: knitr
 URL: https://anonymous.4open.science/r/screenllm
 BugReports: https://anonymous.4open.science/r/screenllm
 Config/roxygen2/version: 8.0.0

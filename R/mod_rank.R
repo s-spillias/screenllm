@@ -37,7 +37,7 @@ mod_rank_ui <- function(id) {
           shiny::numericInput(
             ns("replicates"),
             "Replicates per model",
-            value = 3L, min = 1L, max = 10L, step = 1L
+            value = 1L, min = 1L, max = 10L, step = 1L
           )
         )
       ),
