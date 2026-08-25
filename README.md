@@ -3,16 +3,8 @@
 Turn-key LLM-assisted title/abstract screening for systematic reviews, on a
 laptop.
 
-> ### Alpha testers, start here
->
-> If you were invited to test-drive `screenllm`, follow the tester
-> guide instead of this README:
-> **[docs/getting-started.md](docs/getting-started.md)**
->
-> Report issues at
-> [github.com/s-spillias/screenllm/issues/new/choose](https://github.com/s-spillias/screenllm/issues/new/choose)
-> or email <scott.spillias@csiro.au>. Common problems are covered in
-> [docs/troubleshooting.md](docs/troubleshooting.md).
+> **New to R?** The [getting-started guide](docs/getting-started.md) walks
+> through installation and a first run with no programming experience assumed.
 
 `screenllm` operationalises the two workflow choices systematically
 evaluated in **Spillias et al. (2026)**:
@@ -35,7 +27,7 @@ Two options depending on how much you have to install.
 **Turn-key (recommended for a fresh machine):**
 
 ```r
-install.packages("screenllm")           # once on CRAN
+install.packages("screenllm")           # once available on CRAN
 # or: remotes::install_github("s-spillias/screenllm")
 library(screenllm)
 install_prereqs()                        # detects OS, offers to install
@@ -103,7 +95,7 @@ audit_disagreements(ranked, decisions)          # LLM–human disagreement audit
 ## Design choices
 
 - **Caching is on by default.** Every LLM call is keyed by
-  `digest(list(model, replicate, criteria_hash, record_id, temperature))`.
+  `digest::digest(list(criteria_hash, model, replicate, id, temperature))`.
   An interrupted run resumes seamlessly.
 - **Sequential model service.** Ollama serves one model at a time on a
   laptop. `rank_records()` iterates models × replicates × records; the
@@ -128,9 +120,9 @@ Following the paper's own scoping:
 
 ## Status
 
-**0.1.0 — first release.** Under active development alongside the paper
-revision. API surface is small (six calls in the manual path, one call
-via the Shiny app) and stable; internals may change.
+**0.1.0 — first public release.** The public API is small (six calls in the
+manual path, one call via the Shiny app) and stable; internals may change
+between minor versions.
 
 ## Related packages
 
@@ -150,9 +142,18 @@ integrated stopping rule. If your use case is different, you may want:
   **[rollama](https://cran.r-project.org/package=rollama)** — generic
   Ollama HTTP wrappers (no screening-specific tooling).
 
-## Cite
+## Getting help
 
-If you use `screenllm` in a review, please cite the methods paper:
+- **Usage questions and troubleshooting:** common problems are covered in
+  [docs/troubleshooting.md](docs/troubleshooting.md).
+- **Bug reports and feature requests:** open an issue at
+  [github.com/s-spillias/screenllm/issues](https://github.com/s-spillias/screenllm/issues)
+  or email <scott.spillias@csiro.au>.
+
+## Citation
+
+If `screenllm` contributes to a review or a publication, please cite the
+methods paper it implements:
 
 > Spillias, S., Avila Turriago, L., Brown, C., Easton, A., Roberts, J.,
 > Sievers, M., Swearer, S., Taylor, A., Wright, B., & Komyakova, V.
@@ -160,6 +161,26 @@ If you use `screenllm` in a review, please cite the methods paper:
 > support systematic reviews.* Manuscript in submission; preprint
 > forthcoming.
 
-From R, `citation("screenllm")` returns the canonical entry (BibTeX
-via `toBibtex(citation("screenllm"))`). This file is updated when the
-preprint DOI is issued.
+The canonical, machine-readable entry ships with the package. From R:
+
+```r
+citation("screenllm")                 # formatted reference
+toBibtex(citation("screenllm"))       # BibTeX for a reference manager
+```
+
+The citation is updated with the volume, page, and DOI once the paper is
+published, so re-run `citation("screenllm")` against the version you used.
+
+## Ollama and model licensing
+
+`screenllm` does not include or distribute Ollama or any Ollama models. It
+provides functionality to help you install Ollama and download and manage
+models, including through the Shiny application.
+
+Ollama and individual models are subject to their own licence terms, which
+vary between models and may include use restrictions or other conditions.
+You are responsible for reviewing and complying with the applicable licence
+terms for Ollama and any models you install or use through `screenllm`.
+
+The `screenllm` MIT licence applies to the `screenllm` software itself and
+does not grant any rights to Ollama or to third-party models.
