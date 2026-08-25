@@ -1,4 +1,4 @@
-# Getting started with `screenllm` (alpha)
+# Getting started with `screenllm`
 
 **Time commitment:** about 30 minutes for install, 20 minutes to try. You can
 walk away during the model download (~10 GB, ~15-30 minutes on typical
@@ -93,7 +93,7 @@ Go through the tabs in order. There's a demo corpus baked in so you
 don't need to bring anything.
 
 **Tab 1 - Setup**
-- Type a project name (e.g. `test-drive`) in the "Create a new project"
+- Type a project name (e.g. `my-review`) in the "Create a new project"
   field, click "Create / select".
 - On the right, confirm "Ollama reachable" (green badge).
 - Under "Choose ensemble", pick "Light (4 small models)".
@@ -144,26 +144,19 @@ don't need to bring anything.
 
 **Tab 8 - Report**
 - Click "Download HTML report" to get a self-contained report of your
-  test session. Open it in a browser. Use "Print > Save as PDF" if you
+  session. Open it in a browser. Use "Print > Save as PDF" if you
   want an archive.
 
-## 7. Send us your feedback
+## 7. If you get stuck
 
-You're done. Please spend three minutes filling out the feedback form:
+That's the whole workflow. If something didn't work:
 
-<https://anonymous.4open.science/r/screenllm/issues/new/choose>
-
-Pick "Alpha tester feedback." If something broke, pick "Bug report"
-instead.
-
-If GitHub is blocked at your institution, contact the maintainers
-(anonymous@example.com) with:
-
-- Your operating system and RAM
-- Which step (from the numbered list above) failed
-- What the error message was, verbatim
-- How long you spent on the whole exercise
-- Would you use this on a real review? Why or why not?
+- Check [troubleshooting.md](troubleshooting.md) for common problems.
+- Report a bug at
+  <https://anonymous.4open.science/r/screenllm/issues/new/choose>.
+- If GitHub is blocked at your institution, email the maintainers
+  (anonymous@example.com) with your operating system and RAM, which
+  numbered step failed, and the error message verbatim.
 
 ## Common questions
 
@@ -182,10 +175,9 @@ Excel, and RIS (Zotero/EndNote) are all supported. It needs at least a
 smaller: `install_prereqs(models = c("gemma3:1b", "llama3.2:1b"))`.
 Accuracy drops but it'll run on 4 GB of RAM.
 
-**Q: Can I use this for a real review?** Yes, on the understanding
-that it's alpha software. The methodology is peer-reviewed (Anonymous et
-al. 2026); the package around it is still being refined based on
-feedback like yours.
+**Q: Can I use this for a real review?** Yes. The methodology is
+peer-reviewed (Anonymous et al. 2026); the package implementing it is
+under active development.
 
 **Q: How do I close everything down?** Close the browser tab, then in R
 run `q()`. Ollama keeps running in the background — quit it via the
