@@ -6,8 +6,8 @@ Initial CRAN submission of `screenllm` 0.1.0.
 
 ## Test environments
 
-* Local: Ubuntu 24.04, R 4.5.x — `R CMD check --as-cran` OK (0 errors,
-  0 warnings, 0 notes).
+* Local: Ubuntu 24.04, R 4.6.1 — `R CMD check --as-cran` OK (0 errors,
+  0 warnings, 1 note: "New submission").
 * Windows (via `devtools::check_win_devel()`): __PASTE RESULTS HERE__.
   The result URL is emailed from win-builder within 30 minutes of
   upload and looks like <https://win-builder.r-project.org/xxxxxxxx/>.
@@ -19,19 +19,27 @@ Initial CRAN submission of `screenllm` 0.1.0.
 
 ## R CMD check results
 
-Local `R CMD check --as-cran` on commit `d4b7496`:
+Local `R CMD check --as-cran` (R 4.6.1, Ubuntu 24.04) on commit
+`__RELEASE COMMIT SHA__`:
 
 * 0 ERRORs
 * 0 WARNINGs
-* 0 NOTEs
+* 1 NOTE
+
+The one NOTE is the standard first-submission flag:
+
+    Maintainer: 'Scott Spillias <scott.spillias@csiro.au>'
+    New submission
+
+This is a new submission, so the NOTE is expected.
 
 ## Downstream dependencies
 
 None (first release).
 
-## Alpha testing
+## Pre-submission testing
 
-Package went through internal alpha testing with a small group of
+Package went through internal testing with a small group of
 colleagues before submission; feedback surfaced several UX bugs
 (silent decision-drop from a base-`rbind` column mismatch; a
 `cli_alert_info` argument-list misuse on the "no Ollama installed"
@@ -67,12 +75,12 @@ regression-tested.
 3. **Shiny app** is `Suggests:`-only, so users on servers without
    Shiny installed can still call the ranking / stopping API.
 
-4. **Companion paper.** Spillias et al. (2026), *An open-source
-   LLM-assisted screening workflow for environmental systematic
+4. **Companion paper.** Spillias et al. (2026), *Operationalising
+   LLM-assisted screening of literature to support systematic
    reviews.* (in submission — DOI to be added on acceptance and
    reflected in a 0.1.1 update).
 
 ## Reproducibility
 
 * Source: <https://github.com/s-spillias/screenllm>
-* Public before submission: yes (private during alpha).
+* Public before submission: yes (private during development).
