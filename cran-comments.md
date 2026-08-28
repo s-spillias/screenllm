@@ -8,19 +8,21 @@ Initial CRAN submission of `screenllm` 0.1.0.
 
 * Local: Ubuntu 24.04, R 4.6.1 — `R CMD check --as-cran` OK (0 errors,
   0 warnings, 1 note: "New submission").
-* Windows (via `devtools::check_win_devel()`): __PASTE RESULTS HERE__.
-  The result URL is emailed from win-builder within 30 minutes of
-  upload and looks like <https://win-builder.r-project.org/xxxxxxxx/>.
-* R-hub (via GitHub Actions R-hub workflow): __PASTE RESULTS HERE__.
-  See <https://github.com/s-spillias/screenllm/actions/workflows/rhub.yaml>.
+* Windows via win-builder (`devtools::check_win_devel()`): not run — the
+  build machine cannot reach win-builder.r-project.org (connection blocked
+  on all ports). Windows R-devel is covered by the R-hub run below instead.
+* R-hub (manual `workflow_dispatch`; see
+  <https://github.com/s-spillias/screenllm/actions/workflows/rhub.yaml>):
+  macOS R-devel — OK, 0 errors / 0 warnings (run 33141532933);
+  Windows R-devel — OK, 0 errors / 0 warnings (run 33142728441).
 * GitHub Actions R-CMD-check matrix (see `.github/workflows/R-CMD-check.yaml`):
-  ubuntu-latest R-release + R-devel, macos-latest R-release,
-  windows-latest R-release. Latest green: __PASTE COMMIT SHA HERE__.
+  ubuntu-latest R-release + R-devel, windows-latest R-release — all OK.
+  Latest green: 31b2da9 (run 33140210343).
 
 ## R CMD check results
 
 Local `R CMD check --as-cran` (R 4.6.1, Ubuntu 24.04) on commit
-`__RELEASE COMMIT SHA__`:
+`31b2da9` (tagged `v0.1.0`):
 
 * 0 ERRORs
 * 0 WARNINGs
