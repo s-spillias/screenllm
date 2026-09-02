@@ -14,3 +14,4 @@ Resolves to the platform-appropriate per-user data location
 (\code{tools::R_user_dir()}), created if it does not exist. Individual
 projects live under \verb{<root>/projects/<project_name>/}.
 }
+\keyword{internal}

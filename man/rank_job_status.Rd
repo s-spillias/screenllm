@@ -18,3 +18,4 @@ so far), and optionally \code{error} and \code{elapsed_secs}.
 \description{
 Non-blocking: reads the progress file the worker updates.
 }
+\keyword{internal}

@@ -15,3 +15,4 @@ Invisibly, \code{TRUE}.
 \description{
 Cancel a running pull job
 }
+\keyword{internal}

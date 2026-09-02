@@ -61,7 +61,7 @@ parse_started_at <- function(x) {
 #'   force-quit R session -- and want to take over the project.
 #' @return A list with `pid` (the worker PID) and `handle` (the callr
 #'   process object).
-#' @export
+#' @keywords internal
 start_rank_job <- function(project,
                            ensemble = default_ensemble(),
                            sample_size = NULL,
@@ -178,7 +178,7 @@ start_rank_job <- function(project,
 #'   `"error"`), `processed`, `total`, `percent`, `current_model`,
 #'   `eta_secs`, `scores` (a per-call data.frame of everything scored
 #'   so far), and optionally `error` and `elapsed_secs`.
-#' @export
+#' @keywords internal
 rank_job_status <- function(project) {
   st <- load_artefact(project, "progress")
   if (is.null(st)) {
@@ -213,7 +213,7 @@ rank_job_status <- function(project) {
 #'
 #' @param handle Callr process object.
 #' @return Invisibly, `TRUE`.
-#' @export
+#' @keywords internal
 rank_job_cancel <- function(handle) {
   if (!is.null(handle) && handle$is_alive()) handle$kill()
   invisible(TRUE)

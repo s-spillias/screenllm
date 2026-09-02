@@ -36,7 +36,7 @@ ROCm equivalents don't expose live clock data through a portable
 CLI.
 }
 \examples{
-\dontrun{
+\donttest{
 s <- gpu_status()
 if (isTRUE(s$throttled)) message(s$hint)
 }

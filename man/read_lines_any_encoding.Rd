@@ -2,7 +2,7 @@
 % Please edit documentation in R/io.R
 \name{read_lines_any_encoding}
 \alias{read_lines_any_encoding}
-\title{Read a text file with a robust encoding fallback.}
+\title{Read a text file, trying several encodings in turn.}
 \usage{
 read_lines_any_encoding(path)
 }

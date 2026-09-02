@@ -96,7 +96,7 @@ audit_disagreements(ranked, decisions)          # LLM–human disagreement audit
 
 - **Caching is on by default.** Every LLM call is keyed by
   `digest::digest(list(criteria_hash, model, replicate, id, temperature))`.
-  An interrupted run resumes seamlessly.
+  An interrupted run resumes where it left off.
 - **Sequential model service.** Ollama serves one model at a time on a
   laptop. `rank_records()` iterates models × replicates × records; the
   progress bar shows where you are.

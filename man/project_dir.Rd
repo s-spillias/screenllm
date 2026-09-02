@@ -20,3 +20,4 @@ already exist. Names are normalised to a filesystem-friendly slug
 (spaces become underscores; unusual characters are dropped) so users
 can enter freeform names.
 }
+\keyword{internal}

@@ -48,7 +48,7 @@ for weight loading.
 The estimate is intentionally coarse. Real wall-clock depends on
 hardware (GPU vs CPU), Ollama's model-swapping behaviour, prompt
 length, and other user-load on the machine. Treat the number as an
-order-of-magnitude sanity check, not a promise.
+order-of-magnitude estimate only.
 }
 \examples{
 ens <- default_ensemble(backend = backend_mock())

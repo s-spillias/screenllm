@@ -49,3 +49,4 @@ of them. This is the mechanism the Shiny app uses for "quick pilot"
 runs against a real Ollama backend: same code path as a full rank,
 just fewer records.
 }
+\keyword{internal}

@@ -25,3 +25,4 @@ Idempotent per-model within one R session: if a pull is already
 running for \code{model}, returns the existing handle instead of
 launching another.
 }
+\keyword{internal}

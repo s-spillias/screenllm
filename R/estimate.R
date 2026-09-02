@@ -9,7 +9,7 @@
 #' The estimate is intentionally coarse. Real wall-clock depends on
 #' hardware (GPU vs CPU), Ollama's model-swapping behaviour, prompt
 #' length, and other user-load on the machine. Treat the number as an
-#' order-of-magnitude sanity check, not a promise.
+#' order-of-magnitude estimate only.
 #'
 #' @param n_records Number of records in the corpus.
 #' @param ensemble A `screenllm_ensemble` object.

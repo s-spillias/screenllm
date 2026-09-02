@@ -21,9 +21,7 @@ hard-coding the criteria in the package, so a colleague can
 iterate on the demo criteria without touching R source.
 }
 \examples{
-\dontrun{
 criteria <- load_toy_cbfm_criteria()
 criteria$scope
 criteria$inclusions
-}
 }

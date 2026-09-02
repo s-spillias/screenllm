@@ -41,7 +41,7 @@ Print > Save as PDF to archive as PDF (this avoids the LaTeX install
 that a direct PDF backend would need).
 }
 \details{
-All artefact arguments default to \code{NULL}; the template gracefully
+All artefact arguments default to \code{NULL}; the template
 fills in "(not recorded)" for anything missing, so the same call
 works whether the reviewer is midway through screening or fully
 finished.

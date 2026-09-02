@@ -15,3 +15,4 @@ Character path.
 \description{
 Return the cache directory for a project (used by \code{rank_records})
 }
+\keyword{internal}

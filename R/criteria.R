@@ -174,11 +174,9 @@ build_prompt <- function(criteria, record) {
 #' @return A `screenllm_criteria` object.
 #' @export
 #' @examples
-#' \dontrun{
 #' criteria <- load_toy_cbfm_criteria()
 #' criteria$scope
 #' criteria$inclusions
-#' }
 load_toy_cbfm_criteria <- function() {
   path <- system.file("extdata", "toy_cbfm_criteria.R",
                       package = "screenllm")

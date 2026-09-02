@@ -124,7 +124,7 @@ detect_gpu <- function() {
 #'   `hint` (short human-readable action if throttled).
 #' @export
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' s <- gpu_status()
 #' if (isTRUE(s$throttled)) message(s$hint)
 #' }

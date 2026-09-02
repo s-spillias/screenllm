@@ -8,7 +8,7 @@ Initial CRAN release.
   served locally by Ollama. Every per-call score is cached under the
   project's cache directory, keyed by
   `digest(list(criteria_hash, model, replicate, id, temperature))`. An
-  interrupted run resumes seamlessly on the next call. Cache writes are
+  interrupted run resumes from the cache on the next call. Cache writes are
   atomic (temp file + rename) so a crash mid-write can't leave a
   truncated file behind.
 * Optional `on_score` callback for streaming partial-run progress into

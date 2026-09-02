@@ -18,3 +18,4 @@ when there is no progress file for \code{model}.
 \description{
 Current status of a background model pull
 }
+\keyword{internal}

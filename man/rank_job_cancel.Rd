@@ -16,3 +16,4 @@ Invisibly, \code{TRUE}.
 Requires the caller to have kept the \code{handle} returned by
 \code{start_rank_job()}.
 }
+\keyword{internal}

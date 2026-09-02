@@ -103,7 +103,7 @@ read_records_from_path <- function(path) {
 # AU (authors), UR (URL), and ER (end of record). Silently ignores the
 # rest. Multi-line values are supported by continuation of the same
 # tag.
-#' Read a text file with a robust encoding fallback.
+#' Read a text file, trying several encodings in turn.
 #'
 #' EndNote / Web of Science / Zotero RIS and CSV exports on Windows
 #' are frequently Windows-1252 or Latin-1, not UTF-8. Hardcoding

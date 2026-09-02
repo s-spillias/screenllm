@@ -16,7 +16,7 @@
 #' projects live under `<root>/projects/<project_name>/`.
 #'
 #' @return Character. The absolute path of the root data directory.
-#' @export
+#' @keywords internal
 data_root <- function() {
   root <- tools::R_user_dir("screenllm", which = "data")
   # On a locked-down system (corporate laptop with a read-only or
@@ -68,7 +68,7 @@ list_projects <- function() {
 #' @param name Project name.
 #' @param create Whether to create the directory if it does not exist.
 #' @return Character. Absolute path.
-#' @export
+#' @keywords internal
 project_dir <- function(name, create = FALSE) {
   stopifnot(is.character(name), length(name) == 1L, nzchar(name))
   slug <- slugify_project_name(name)
@@ -270,7 +270,7 @@ match_artefact <- function(artefact) {
 #'
 #' @param project Project name.
 #' @return Character path.
-#' @export
+#' @keywords internal
 project_cache_dir <- function(project) {
   path <- fs::path(project_dir(project, create = TRUE), "cache")
   fs::dir_create(path, recurse = TRUE)

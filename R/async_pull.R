@@ -20,7 +20,7 @@
 #' @param model Ollama model tag (e.g. `"mistral:7b"`).
 #' @param ollama_url Base URL of the Ollama server.
 #' @return A list with `model`, `pid`, `handle`, and `progress_path`.
-#' @export
+#' @keywords internal
 start_pull_job <- function(model,
                            ollama_url = getOption("screenllm.ollama_url")) {
   rlang::check_installed("callr", "to run pulls in the background.")
@@ -69,7 +69,7 @@ start_pull_job <- function(model,
 #'   `"running"`, `"done"`, `"error"`), `completed`, `total`,
 #'   `percent`, `detail`, `error`, and `elapsed_secs`. `status = "idle"`
 #'   when there is no progress file for `model`.
-#' @export
+#' @keywords internal
 pull_job_status <- function(model) {
   path <- pull_progress_path(model)
   if (!fs::file_exists(path)) {
@@ -92,7 +92,7 @@ pull_job_status <- function(model) {
 #'
 #' @param handle Callr process object (from `start_pull_job()$handle`).
 #' @return Invisibly, `TRUE`.
-#' @export
+#' @keywords internal
 pull_job_cancel <- function(handle) {
   if (!is.null(handle) && handle$is_alive()) handle$kill()
   invisible(TRUE)
