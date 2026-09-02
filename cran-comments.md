@@ -13,16 +13,16 @@ Initial CRAN submission of `screenllm` 0.1.0.
   on all ports). Windows R-devel is covered by the R-hub run below instead.
 * R-hub (manual `workflow_dispatch`; see
   <https://github.com/s-spillias/screenllm/actions/workflows/rhub.yaml>):
-  macOS R-devel — OK, 0 errors / 0 warnings (run 33141532933);
-  Windows R-devel — OK, 0 errors / 0 warnings (run 33142728441).
+  macOS R-devel and Windows R-devel — both OK, 0 errors / 0 warnings
+  (run 33581273959).
 * GitHub Actions R-CMD-check matrix (see `.github/workflows/R-CMD-check.yaml`):
   ubuntu-latest R-release + R-devel, windows-latest R-release — all OK.
-  Latest green: 31b2da9 (run 33140210343).
+  Latest green: 322a3d2 (run 33581271793).
 
 ## R CMD check results
 
 Local `R CMD check --as-cran` (R 4.6.1, Ubuntu 24.04) on commit
-`31b2da9` (tagged `v0.1.0`):
+`322a3d2` (tagged `v0.1.0`):
 
 * 0 ERRORs
 * 0 WARNINGs
