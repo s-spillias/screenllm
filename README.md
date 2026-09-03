@@ -3,7 +3,7 @@
 Turn-key LLM-assisted title/abstract screening for systematic reviews, on a
 laptop.
 
-> **New to R?** The [getting-started guide](docs/getting-started.md) walks
+> **New to R?** The [getting-started guide](https://github.com/s-spillias/screenllm/blob/main/docs/getting-started.md) walks
 > through installation and a first run with no programming experience assumed.
 
 `screenllm` operationalises the two workflow choices systematically
@@ -145,7 +145,7 @@ integrated stopping rule. If your use case is different, you may want:
 ## Getting help
 
 - **Usage questions and troubleshooting:** common problems are covered in
-  [docs/troubleshooting.md](docs/troubleshooting.md).
+  [the troubleshooting guide](https://github.com/s-spillias/screenllm/blob/main/docs/troubleshooting.md).
 - **Bug reports and feature requests:** open an issue at
   [github.com/s-spillias/screenllm/issues](https://github.com/s-spillias/screenllm/issues)
   or email <scott.spillias@csiro.au>.

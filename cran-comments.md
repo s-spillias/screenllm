@@ -35,6 +35,11 @@ The one NOTE is the standard first-submission flag:
 
 This is a new submission, so the NOTE is expected.
 
+On win-builder (R-devel) the incoming spell-check additionally lists a few
+"possibly misspelled words" in DESCRIPTION: "Ollama" (the software this
+package drives), "Spillias" and "Vembye" (author surnames), "choosable",
+and "et"/"al" (from "et al."). All are correct as written.
+
 ## Downstream dependencies
 
 None (first release).
