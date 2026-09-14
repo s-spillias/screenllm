@@ -31,8 +31,8 @@ This is a resubmission. In response to the reviewer's comments I have:
 
 * New submission.
 * "Possibly misspelled words" in DESCRIPTION — Ollama (the software),
-  Spillias and Vembye (author surnames), choosable, and et/al (from
-  "et al."); all correct as written.
+  Spillias and Vembye (author surnames), and et/al (from "et al.");
+  all correct as written.
 
 ## Downstream dependencies
 
@@ -41,9 +41,10 @@ None (first release).
 ## Note for reviewers
 
 `backend_ollama()` talks to a locally-installed Ollama server
-(<https://ollama.com>), which is optional. Examples that need a live
-server use `\dontrun{}`; the others run against a built-in mock backend.
-All tests use that mock backend and open no network connection, and the
-vignette's Ollama-dependent chunks are `eval = FALSE`. `install_prereqs()`
-offers to install Ollama only after an interactive confirmation, and is a
-no-op in non-interactive sessions.
+(<https://ollama.com>), which is optional. All tests use a built-in mock
+backend and open no network connection, the vignette's Ollama-dependent
+chunks are `eval = FALSE`, and examples either use the mock backend or
+degrade gracefully when no server is present. The one remaining
+`\dontrun{}` is on `install_prereqs()`, which installs Ollama and pulls
+multi-GB models; it offers to install only after an interactive
+confirmation and is a no-op in non-interactive sessions.
