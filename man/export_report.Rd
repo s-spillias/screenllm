@@ -47,11 +47,13 @@ works whether the reviewer is midway through screening or fully
 finished.
 }
 \examples{
-\dontrun{
-path <- export_report(project = "my-review",
-                      ranked = load_artefact("my-review", "ranked"),
-                      plan = load_artefact("my-review", "plan"),
-                      decisions = load_artefact("my-review", "decisions"))
-utils::browseURL(path)
+\donttest{
+# Render a minimal report to a temporary HTML file.
+ranked <- data.frame(
+  id = "r1", title = "Example study", abstract = "A short abstract.",
+  universal_best_score = 80, rank = 1
+)
+out <- tempfile(fileext = ".html")
+export_report(output_file = out, ranked = ranked)
 }
 }

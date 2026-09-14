@@ -10,11 +10,14 @@
 #' @param ranked The full ranking (needed for the per-criterion
 #'   justifications).
 #' @param out_file Path where decisions are written (`.csv` or `.xlsx`).
+#'   Defaults to a file in the session's temporary directory; pass an
+#'   explicit path to keep the decisions after the session ends.
 #' @param launch_browser Passed to `shiny::runApp()`.
 #' @return Invisibly, the path to `out_file`.
 #' @export
 launch_screening_app <- function(plan, ranked,
-                                 out_file = "screening_decisions.csv",
+                                 out_file = file.path(tempdir(),
+                                                      "screening_decisions.csv"),
                                  launch_browser = interactive()) {
   rlang::check_installed(c("shiny", "bslib", "DT"), "to launch the screening app.")
   stopifnot(inherits(plan, "screenllm_plan"), is.data.frame(ranked))

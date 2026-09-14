@@ -54,14 +54,14 @@ user declines or the package manager is unavailable, opens
 Safe to re-run: it is a no-op if everything is already in place.
 }
 \examples{
-\dontrun{
-# Laptop-friendly preset (~10 GB; runs on 8-16 GB RAM):
-install_prereqs(preset = "light")
-
-# Paper ensemble (~65 GB; needs a workstation):
-install_prereqs(preset = "paper")
-
-# Check Ollama is installed without pulling any models:
+\donttest{
+# Check for Ollama without pulling any models. In a non-interactive
+# session this only reports status and installs nothing.
 install_prereqs(preset = "none")
+}
+\dontrun{
+# Interactive setup that offers to install Ollama and pull models:
+install_prereqs(preset = "light") # ~10 GB; runs on 8-16 GB RAM
+install_prereqs(preset = "paper") # ~65 GB; needs a workstation
 }
 }

@@ -216,12 +216,15 @@ delete_artefact <- function(project, artefact = "all") {
 #' @return Invisibly, the number of cache files removed.
 #' @export
 #' @examples
-#' \dontrun{
-#' # Clear one model's cached scores after it misbehaved
-#' clear_cache("my-review", model = "mistral:7b")
-#'
-#' # Nuclear option: clear everything for a project
-#' clear_cache("my-review")
+#' \donttest{
+#' # Operate against a throwaway data directory so the example never
+#' # touches your real projects.
+#' withr::with_envvar(c(R_USER_DATA_DIR = tempfile("screenllm-")), {
+#'   # Clear one model's cached scores (a no-op on an empty project):
+#'   clear_cache("demo-project", model = "mistral:7b")
+#'   # Clear everything for the project:
+#'   clear_cache("demo-project")
+#' })
 #' }
 clear_cache <- function(project, model = NULL, delete_ranked = TRUE) {
   cache_dir <- project_cache_dir(project)

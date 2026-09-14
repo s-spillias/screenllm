@@ -108,6 +108,8 @@ mod_plan_server <- function(id, state) {
     output$score_plot <- shiny::renderPlot({
       r <- state$ranked; plan <- live_plan()
       if (is.null(r)) return(NULL)
+      oldpar <- par(no.readonly = TRUE)
+      on.exit(par(oldpar))
       par(mar = c(4, 4, 1, 1))
       plot(r$rank, r$universal_best_score, type = "h", lwd = 1,
            col = "grey60",

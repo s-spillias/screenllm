@@ -13,9 +13,9 @@
 #' @return Invisible logical.
 #' @export
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' check_setup()
-#' check_setup(models = NULL) # just check server, not models
+#' check_setup(models = NULL) # just check the server, not the models
 #' }
 check_setup <- function(models = .PINNED_DEFAULT_MODELS,
                         ollama_url = getOption("screenllm.ollama_url")) {
@@ -219,15 +219,15 @@ ollama_installed_models <- function(
 #'   after the call, `FALSE` otherwise.
 #' @export
 #' @examples
-#' \dontrun{
-#' # Laptop-friendly preset (~10 GB; runs on 8-16 GB RAM):
-#' install_prereqs(preset = "light")
-#'
-#' # Paper ensemble (~65 GB; needs a workstation):
-#' install_prereqs(preset = "paper")
-#'
-#' # Check Ollama is installed without pulling any models:
+#' \donttest{
+#' # Check for Ollama without pulling any models. In a non-interactive
+#' # session this only reports status and installs nothing.
 #' install_prereqs(preset = "none")
+#' }
+#' \dontrun{
+#' # Interactive setup that offers to install Ollama and pull models:
+#' install_prereqs(preset = "light") # ~10 GB; runs on 8-16 GB RAM
+#' install_prereqs(preset = "paper") # ~65 GB; needs a workstation
 #' }
 install_prereqs <- function(preset = NULL,
                             models = .PINNED_DEFAULT_MODELS,

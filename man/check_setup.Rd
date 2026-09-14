@@ -27,8 +27,8 @@ Returns \code{TRUE} invisibly on success and prints a diagnostic panel;
 returns \code{FALSE} on failure with actionable messages.
 }
 \examples{
-\dontrun{
+\donttest{
 check_setup()
-check_setup(models = NULL) # just check server, not models
+check_setup(models = NULL) # just check the server, not the models
 }
 }
