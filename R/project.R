@@ -9,6 +9,9 @@
 # Each subdirectory is one "project" (typically one review). Users pick
 # or create a project by name in the Setup tab.
 
+# Package-internal session state (not user-facing options).
+.screenllm_state <- new.env(parent = emptyenv())
+
 #' Root data directory used by the Shiny app
 #'
 #' Resolves to the platform-appropriate per-user data location
@@ -35,12 +38,12 @@ data_root <- function() {
     fallback <- fs::path(tempdir(), "screenllm-data")
     fs::dir_create(fallback, recurse = TRUE)
     fs::dir_create(fs::path(fallback, "projects"), recurse = TRUE)
-    if (!identical(getOption("screenllm.data_root_warned"), TRUE)) {
+    if (!isTRUE(.screenllm_state$data_root_warned)) {
       cli::cli_alert_warning(
         "Could not write to {.path {root}}; using {.path {fallback}}. \\
          Projects will not persist across R sessions."
       )
-      options(screenllm.data_root_warned = TRUE)
+      .screenllm_state$data_root_warned <- TRUE
     }
     return(as.character(fallback))
   }
